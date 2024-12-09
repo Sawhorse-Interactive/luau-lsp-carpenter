@@ -162,19 +162,21 @@ Luau::ToStringResult toStringReturnTypeDetailed(Luau::TypePackId retTypes, Luau:
 // Duplicated from Luau/TypeInfer.h, since its static
 std::optional<Luau::AstExpr*> matchRequire(const Luau::AstExprCall& call)
 {
-    const char* require = "require";
-
     if (call.args.size != 1)
         return std::nullopt;
 
-    const Luau::AstExprGlobal* funcAsGlobal = call.func->as<Luau::AstExprGlobal>();
-    if (!funcAsGlobal || funcAsGlobal->name != require)
-        return std::nullopt;
+    const char* require[2] = {"require", "shared"};
 
-    if (call.args.size != 1)
-        return std::nullopt;
+    for (const char* requireChar : require)
+    {
+        const Luau::AstExprGlobal* funcAsGlobal = call.func->as<Luau::AstExprGlobal>();
+        if (!funcAsGlobal || funcAsGlobal->name != requireChar)
+            continue;
 
-    return call.args.data[0];
+        return call.args.data[0];
+    }
+
+    return std::nullopt;
 }
 } // namespace types
 

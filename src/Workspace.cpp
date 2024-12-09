@@ -291,6 +291,7 @@ void WorkspaceFolder::registerTypes()
 
     auto& tagRegisterGlobals = FFlag::LuauSolverV2 ? frontend.globals : frontend.globalsForAutocomplete;
     Luau::attachTag(Luau::getGlobalBinding(tagRegisterGlobals, "require"), "Require");
+    Luau::attachTag(Luau::getGlobalBinding(tagRegisterGlobals, "shared"), "Shared");
 
     if (client->definitionsFiles.empty())
         client->sendLogMessage(lsp::MessageType::Warning, "No definitions file provided by client");
@@ -306,6 +307,16 @@ void WorkspaceFolder::registerTypes()
             client->sendWindowMessage(lsp::MessageType::Error,
                 "Failed to read definitions file " + resolvedFilePath.generic_string() + ". Extended types will not be provided");
             continue;
+        }
+
+        // Remove types that were added to the definitions file which will prevent the "shared" type from being considered part of an expression
+        std::string sharedChars = "declare shared: any";
+        size_t sharedPos = definitionsContents->find(sharedChars.c_str());
+
+        if (sharedPos != std::string::npos) {
+            definitionsContents->erase(sharedPos, sharedChars.size() + 1);
+            client->sendWindowMessage(lsp::MessageType::Error,
+                "[Carpenter] Removed shared type in definitions file: " + definitionsFile.generic_string() + ".");
         }
 
         // Parse definitions file metadata

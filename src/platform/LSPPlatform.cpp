@@ -6,6 +6,12 @@
 
 #include <memory>
 
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <iostream>
+#endif
+
 LSPPlatform::LSPPlatform(WorkspaceFileResolver* fileResolver, WorkspaceFolder* workspaceFolder)
     : fileResolver(fileResolver)
     , workspaceFolder(workspaceFolder)
@@ -171,10 +177,11 @@ std::optional<Luau::ModuleInfo> LSPPlatform::resolveStringRequire(const Luau::Mo
 std::optional<Luau::ModuleInfo> LSPPlatform::resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node)
 {
     // Handle require("path") for compatibility
+    // In order to reduce complexity we assume any usage of string requires is only for Carpenter
     if (auto* expr = node->as<Luau::AstExprConstantString>())
     {
         std::string requiredString(expr->value.data, expr->value.size);
-        return resolveStringRequire(context, requiredString);
+        return resolveStringRequire(context, "@" + requiredString);
     }
 
     return std::nullopt;
@@ -183,7 +190,7 @@ std::optional<Luau::ModuleInfo> LSPPlatform::resolveModule(const Luau::ModuleInf
 std::optional<Luau::AutocompleteEntryMap> LSPPlatform::completionCallback(
     const std::string& tag, std::optional<const Luau::ClassType*> ctx, std::optional<std::string> contents, const Luau::ModuleName& moduleName)
 {
-    if (tag == "Require")
+    if (tag == "Require" || tag == "Shared")
     {
         if (!contents.has_value())
             return std::nullopt;
