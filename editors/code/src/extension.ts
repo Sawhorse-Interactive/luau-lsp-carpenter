@@ -246,18 +246,27 @@ const startLanguageServer = async (context: vscode.ExtensionContext) => {
 };
 
 function createAliasEntry(file: vscode.Uri) {
-  var fsPath = file.fsPath.replace(/\\init.lua$/, '');
-  var filename = fsPath.replace(/^.*[\\/]/, '').replace("\.lua", '').replace("\.luau", '');
+  var fsPath = file.fsPath.replace(/\\init(\.server|\.client)*(\.lua|\.luau)$/, '');
+  var filename = fsPath.replace(/^.*[\\/]/, '').replace(/(\.server|\.client)*(\.lua|\.luau)$/, '');
       
-  let relativePath = vscode.workspace.asRelativePath(fsPath);
-  return `\t\t"${filename}": "./${relativePath}",\n`;
+  let relativePath = vscode.workspace.asRelativePath(file.fsPath);
+  filename = filename.replace(" ", "");
+  return [filename, `\t\t"${filename}": "./${relativePath}",\n`];
 }
 
 function generateJsonAliasesContents(files: vscode.Uri[]) {
   let json = "{\n\t\"aliases\": {\n\t\t\"src\": \"\./\",\n";
+  let aliasEntries: string[] = [];
 
   for (const file of files) {
-    json += createAliasEntry(file); 
+    let [filename, entryJson] = createAliasEntry(file); 
+
+    if (aliasEntries.includes(filename)) {
+      continue;
+    }
+
+    aliasEntries.push(filename);
+    json += entryJson;
   }
 
   if (json.endsWith(",\n")) {
