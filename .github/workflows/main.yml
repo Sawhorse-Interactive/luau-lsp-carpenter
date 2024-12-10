@@ -12,15 +12,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            artifact-name: luau-lsp-win64
-            code-target: [win32-x64, win32-arm64]
-          - os: ubuntu-20.04
-            artifact-name: luau-lsp-linux
-            code-target: [linux-x64]
-          - os: ubuntu-20.04
-            artifact-name: luau-lsp-linux-arm64
-            code-target: [linux-arm64]
+          # - os: windows-latest
+          #   artifact-name: luau-lsp-win64
+          #   code-target: [win32-x64, win32-arm64]
+          # - os: ubuntu-20.04
+          #   artifact-name: luau-lsp-linux
+          #   code-target: [linux-x64]
+          # - os: ubuntu-20.04
+          #   artifact-name: luau-lsp-linux-arm64
+          #   code-target: [linux-arm64]
           - os: macos-latest
             artifact-name: luau-lsp-macos
             code-target: [darwin-x64, darwin-arm64]
@@ -40,13 +40,13 @@ jobs:
 
       - name: Build Server
         run: |
-          mkdir build && cd build
+          mkdir BUILD_ && cd BUILD_
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DLSP_STATIC_CRT:BOOL=ON
           cmake --build . --config Release --target Luau.LanguageServer.CLI -j 3
 
       - name: (MacOS) Verify universal build
         if: matrix.os == 'macos-latest'
-        run: lipo -archs build/luau-lsp
+        run: lipo -archs BUILD_/luau-lsp
 
       - name: Copy Build into Extension
         shell: bash
