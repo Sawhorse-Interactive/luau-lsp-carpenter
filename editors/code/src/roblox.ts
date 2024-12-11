@@ -412,7 +412,10 @@ const startSourcemapGeneration = async (
 
   childProcess.on("close", (code, signal) => {
     sourcemapGeneratorProcesses.delete(workspaceFolder);
-    watcher.dispose();
+
+    if (watcher) {
+      watcher.dispose();
+    }
 
     if (childProcess.killed) {
       return;
