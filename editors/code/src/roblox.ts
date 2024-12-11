@@ -307,31 +307,35 @@ async function watchLuaPaths(workspaceFolder: vscode.WorkspaceFolder, projectFil
   let allFiles: vscode.Uri[] = [];
 
   for (const rootPath of paths) {
-    let rootUri = vscode.Uri.joinPath(workspaceFolder.uri, rootPath);
-    let files = await findLuaFiles(rootUri);
-    allFiles.push(...files);
+    try {
+      let rootUri = vscode.Uri.joinPath(workspaceFolder.uri, rootPath);
+      let files = await findLuaFiles(rootUri);
+      allFiles.push(...files);
 
-    let watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(rootUri.fsPath, '{**,**/*.lua,**/*.luau}'),
-      false, true
-    )
+      let watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(rootUri.fsPath, '{**,**/*.lua,**/*.luau}'),
+        false, true
+      )
 
-    watcher.onDidCreate((file) => {
-      if (file.fsPath.endsWith('.lua') || file.fsPath.endsWith('.luau')) {
-        addToAliasesFile(workspaceFolder, file);
-      }
-    })
-    
-    watcher.onDidDelete((file) => {
-      if (file.fsPath.endsWith('.lua') || file.fsPath.endsWith('.luau')) {
-        removeFromAliasesFile(workspaceFolder, file);
-      } else {
-        // if its not a lua file its a directory (thanks to our glob pattern)
-        removeDirectoryFromAliasesFile(workspaceFolder, file);
-      }
-    })
+      watcher.onDidCreate((file) => {
+        if (file.fsPath.endsWith('.lua') || file.fsPath.endsWith('.luau')) {
+          addToAliasesFile(workspaceFolder, file);
+        }
+      })
+      
+      watcher.onDidDelete((file) => {
+        if (file.fsPath.endsWith('.lua') || file.fsPath.endsWith('.luau')) {
+          removeFromAliasesFile(workspaceFolder, file);
+        } else {
+          // if its not a lua file its a directory (thanks to our glob pattern)
+          removeDirectoryFromAliasesFile(workspaceFolder, file);
+        }
+      })
 
-    disposables.push(watcher);
+      disposables.push(watcher);
+    } catch (err) {
+      console.warn(err);
+    }
   }
 
   foundFiles = allFiles;
