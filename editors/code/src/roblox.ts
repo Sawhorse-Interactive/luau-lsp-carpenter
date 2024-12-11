@@ -177,8 +177,169 @@ const getRojoProjectFile = async (
   return undefined;
 };
 
+async function findPathsInProjectFile(workspaceFolder: vscode.WorkspaceFolder, projectFilePath: string): Promise<string[]> {
+  const projectFileUri = utils.resolveUri(workspaceFolder.uri, projectFilePath);
+  const fileContent = await vscode.workspace.fs.readFile(projectFileUri);
+  const jsonString = new TextDecoder("utf-8").decode(fileContent);
+  const jsonObject = JSON.parse(jsonString);
+  const paths: Set<string> = new Set();
+
+  function traverse(obj: any) {
+    for (const key in obj) {
+      if (key === '$path') {
+        paths.add(obj[key]);
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        traverse(obj[key]);
+      }
+    }
+  }
+
+  traverse(jsonObject);
+
+  const rootPaths: Set<string> = new Set();
+  paths.forEach(path => {
+    const rootPath = path.split('/')[0];
+    rootPaths.add(rootPath);
+  });
+
+  return Array.from(rootPaths);
+}
+
 const sourcemapGeneratorProcesses: Map<vscode.WorkspaceFolder, ChildProcess> =
   new Map();
+let foundFiles: vscode.Uri[] = [];
+
+function createAliasEntry(file: vscode.Uri) {
+  var fsPath = file.fsPath.replace(/\\init(\.server|\.client)*(\.lua|\.luau)$/, '');
+  var filename = fsPath.replace(/^.*[\\/]/, '').replace(/(\.server|\.client)*(\.lua|\.luau)$/, '');
+      
+  let relativePath = vscode.workspace.asRelativePath(file.fsPath);
+  filename = filename.replace(" ", "");
+  return [filename, `\t\t"${filename}": "./${relativePath}",\n`];
+}
+
+function generateJsonAliasesContents(files: vscode.Uri[]) {
+  let json = "{\n\t\"aliases\": {\n\t\t\"src\": \"\./\",\n";
+  let aliasEntries: string[] = [];
+
+  for (const file of files) {
+    let [filename, entryJson] = createAliasEntry(file); 
+
+    if (aliasEntries.includes(filename)) {
+      continue;
+    }
+
+    aliasEntries.push(filename);
+    json += entryJson;
+  }
+
+  if (json.endsWith(",\n")) {
+    json = json.slice(0, -2);
+  }
+
+  json += `\n\t}\n}`;
+  return json;
+}
+
+function writeAliasesFile(workspaceFolder: vscode.WorkspaceFolder, contentsJson: string) {
+  let aliasesUri = vscode.Uri.joinPath(workspaceFolder.uri, ".luaurc");
+  vscode.workspace.fs.writeFile(aliasesUri, Buffer.from(contentsJson));
+}
+
+async function findLuaFiles(folderUri: vscode.Uri): Promise<vscode.Uri[]> {
+  let files: vscode.Uri[] = [];
+  let processedFiles = 0;
+  let luaFiles = 0;
+
+  await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Window,
+    title: "[Carpenter] Populating .luaurc aliases",
+    cancellable: true
+  }, async (progress) => {
+    async function readDirectoryRecursively(uri: vscode.Uri) {
+      const entries = await vscode.workspace.fs.readDirectory(uri);
+  
+      for (const [name, type] of entries) {
+        const entryUri = vscode.Uri.joinPath(uri, name);
+  
+        if (type === vscode.FileType.Directory) {
+          await readDirectoryRecursively(entryUri);
+        } else if (type === vscode.FileType.File && (name.endsWith('.lua') || name.endsWith('.luau'))) {
+          files.push(entryUri);
+          luaFiles++;
+        }
+        processedFiles++;
+        progress.report({ increment: 1, message: `Processed ${processedFiles} files` });
+      }
+    }
+  
+    await readDirectoryRecursively(folderUri);
+  });
+
+  vscode.window.showInformationMessage(`[Carpenter] Found ${luaFiles} lua/luau files. Total files processed: ${processedFiles}`);
+
+  return files;
+}
+
+function addToAliasesFile(workspaceFolder: vscode.WorkspaceFolder, file: vscode.Uri) {
+  foundFiles.push(file);
+  let contentsJson = generateJsonAliasesContents(foundFiles);
+  writeAliasesFile(workspaceFolder, contentsJson);
+}
+
+function removeFromAliasesFile(workspaceFolder: vscode.WorkspaceFolder, file: vscode.Uri) {
+  foundFiles = foundFiles.filter((element) => element.fsPath !== file.fsPath);
+  let contentsJson = generateJsonAliasesContents(foundFiles);
+  writeAliasesFile(workspaceFolder, contentsJson);
+}
+
+function removeDirectoryFromAliasesFile(workspaceFolder: vscode.WorkspaceFolder, file: vscode.Uri) {
+  foundFiles = foundFiles.filter((element) => {
+    return !element.fsPath.startsWith(file.fsPath);
+  });
+  let contentsJson = generateJsonAliasesContents(foundFiles);
+  writeAliasesFile(workspaceFolder, contentsJson);
+}
+
+async function watchLuaPaths(workspaceFolder: vscode.WorkspaceFolder, projectFile: string): Promise<vscode.Disposable> {
+  const paths = await findPathsInProjectFile(workspaceFolder, projectFile);
+  let disposables: vscode.Disposable[] = [];
+  let allFiles: vscode.Uri[] = [];
+
+  for (const rootPath of paths) {
+    let rootUri = vscode.Uri.joinPath(workspaceFolder.uri, rootPath);
+    let files = await findLuaFiles(rootUri);
+    allFiles.push(...files);
+
+    let watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(rootUri.fsPath, '{**,**/*.lua,**/*.luau}'),
+      false, true
+    )
+
+    watcher.onDidCreate((file) => {
+      if (file.fsPath.endsWith('.lua') || file.fsPath.endsWith('.luau')) {
+        addToAliasesFile(workspaceFolder, file);
+      }
+    })
+    
+    watcher.onDidDelete((file) => {
+      if (file.fsPath.endsWith('.lua') || file.fsPath.endsWith('.luau')) {
+        removeFromAliasesFile(workspaceFolder, file);
+      } else {
+        // if its not a lua file its a directory (thanks to our glob pattern)
+        removeDirectoryFromAliasesFile(workspaceFolder, file);
+      }
+    })
+
+    disposables.push(watcher);
+  }
+
+  foundFiles = allFiles;
+  let contentsJson = generateJsonAliasesContents(foundFiles);
+  writeAliasesFile(workspaceFolder, contentsJson);
+
+  return vscode.Disposable.from(...disposables)
+}
 
 const stopSourcemapGeneration = async (
   workspaceFolder: vscode.WorkspaceFolder,
@@ -230,6 +391,10 @@ const startSourcemapGeneration = async (
     sourcemapFileName,
   ];
 
+  let watcher = await watchLuaPaths(workspaceFolder, projectFile).catch((err) => {
+    console.warn(err);
+  });
+
   if (config.get<boolean>("includeNonScripts")) {
     args.push("--include-non-scripts");
   }
@@ -247,6 +412,8 @@ const startSourcemapGeneration = async (
 
   childProcess.on("close", (code, signal) => {
     sourcemapGeneratorProcesses.delete(workspaceFolder);
+    watcher.dispose();
+
     if (childProcess.killed) {
       return;
     }

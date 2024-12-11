@@ -22,7 +22,6 @@ export type AddArgCallback = (
   mode?: "All" | "Prod" | "Debug",
 ) => void;
 
-let foundFiles: vscode.Uri[] = [];
 let client: LanguageClient | undefined = undefined;
 let platformContext: PlatformContext = { client: undefined };
 const clientDisposables: vscode.Disposable[] = [];
@@ -245,77 +244,10 @@ const startLanguageServer = async (context: vscode.ExtensionContext) => {
   await client.start();
 };
 
-function createAliasEntry(file: vscode.Uri) {
-  var fsPath = file.fsPath.replace(/\\init(\.server|\.client)*(\.lua|\.luau)$/, '');
-  var filename = fsPath.replace(/^.*[\\/]/, '').replace(/(\.server|\.client)*(\.lua|\.luau)$/, '');
-      
-  let relativePath = vscode.workspace.asRelativePath(file.fsPath);
-  filename = filename.replace(" ", "");
-  return [filename, `\t\t"${filename}": "./${relativePath}",\n`];
-}
-
-function generateJsonAliasesContents(files: vscode.Uri[]) {
-  let json = "{\n\t\"aliases\": {\n\t\t\"src\": \"\./\",\n";
-  let aliasEntries: string[] = [];
-
-  for (const file of files) {
-    let [filename, entryJson] = createAliasEntry(file); 
-
-    if (aliasEntries.includes(filename)) {
-      continue;
-    }
-
-    aliasEntries.push(filename);
-    json += entryJson;
-  }
-
-  if (json.endsWith(",\n")) {
-    json = json.slice(0, -2);
-  }
-
-  json += `\n\t}\n}`;
-  return json;
-}
-
-function writeAliasesFile(contentsJson: string) {
-  let workspaces = vscode.workspace.workspaceFolders;
-
-  if (!workspaces) {
-    console.warn("No workspaces");
-    return;
-  }
-
-  let aliasesUri = workspaces[0].uri.with({ path: workspaces[0].uri.path + "/.luaurc" });
-  vscode.workspace.fs.writeFile(aliasesUri, Buffer.from(contentsJson));
-}
-
-async function createAliasesFile() {
-  await vscode.workspace.findFiles("{**/*.lua,**/*.luau}").then((files) => {
-    foundFiles = files;
-  });
-
-  let contentsJson = generateJsonAliasesContents(foundFiles);
-  writeAliasesFile(contentsJson);
-}
-
-function addToAliasesFile(file: vscode.Uri) {
-  foundFiles.push(file);
-  let contentsJson = generateJsonAliasesContents(foundFiles);
-  writeAliasesFile(contentsJson);
-}
-
-function removeFromAliasesFile(file: vscode.Uri) {
-  foundFiles = foundFiles.filter((element) => element.fsPath !== file.fsPath);
-  let contentsJson = generateJsonAliasesContents(foundFiles);
-  writeAliasesFile(contentsJson);
-}
-
 export async function activate(context: vscode.ExtensionContext) {
   console.log("Luau LSP activated");
 
   await roblox.onActivate(platformContext, context);
-
-  createAliasesFile();
 
   context.subscriptions.push(
     vscode.commands.registerCommand("luau-lsp.reloadServer", async () => {
@@ -325,33 +257,6 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("luau-lsp.flushTimeTrace", async () => {
       if (client) {
         client.sendNotification("$/flushTimeTrace");
-      }
-    }),
-    vscode.workspace.onDidCreateFiles((e) => {
-      for (const file of e.files) {
-        if (file.fsPath.endsWith(".lua") || file.fsPath.endsWith(".luau")) {
-          addToAliasesFile(file);
-        }
-        // this would help with finding a file which shares the same name as a child file
-        // but introduces its own problems which im not going to address right now
-        // else {
-        //   vscode.workspace.fs.stat(file).then((stat) => {
-        //     if (stat.type === vscode.FileType.Directory) {
-        //       addToAliasesFile(file);
-        //     }
-        //   });
-        // }
-      }
-    }),
-    vscode.workspace.onDidDeleteFiles((e) => {
-      for (const file of e.files) {
-        removeFromAliasesFile(file);
-      }
-    }),
-    vscode.workspace.onDidRenameFiles((e) => {
-      for (const file of e.files) {
-        removeFromAliasesFile(file.oldUri)
-        addToAliasesFile(file.newUri)
       }
     }),
   );
