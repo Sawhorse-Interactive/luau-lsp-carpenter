@@ -315,8 +315,6 @@ void WorkspaceFolder::registerTypes()
 
         if (sharedPos != std::string::npos) {
             definitionsContents->erase(sharedPos, sharedChars.size() + 1);
-            client->sendWindowMessage(lsp::MessageType::Error,
-                "[Carpenter] Removed shared type in definitions file: " + definitionsFile.generic_string() + ".");
         }
 
         // Parse definitions file metadata
