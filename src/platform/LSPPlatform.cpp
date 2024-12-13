@@ -174,12 +174,68 @@ std::optional<Luau::ModuleInfo> LSPPlatform::resolveStringRequire(const Luau::Mo
     return Luau::ModuleInfo{fileResolver->getModuleName(uri)};
 }
 
+std::optional<std::string> LSPPlatform::getCommentRequireString(const Luau::ModuleInfo*context, Luau::AstExpr* node) {
+    auto textDocument = fileResolver->getTextDocumentFromModuleName(context->name);
+
+    if (!textDocument)
+        return std::nullopt;
+
+    std::string nodeLine = textDocument->getLine(node->location.begin.line);
+    size_t commentPos = nodeLine.find("---");
+
+    if (commentPos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    if (commentPos + 3 >= nodeLine.size()) {
+        return std::nullopt;
+    }
+
+    std::string comment = nodeLine.substr(commentPos + 3);
+    std::string keyword = "@module ";
+    size_t keywordPos = comment.find(keyword);
+
+    if (keywordPos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    if (keywordPos + keyword.length() >= comment.size()) {
+        return std::nullopt;
+    }
+
+    std::string moduleName = comment.substr(keywordPos + keyword.length());
+
+    size_t start = moduleName.find_first_not_of(" \t\n\r\f\v");
+    if (start == std::string::npos) {
+        return std::nullopt;
+    }
+    moduleName.erase(0, start);
+
+    size_t end = moduleName.find_last_not_of(" \t\n\r\f\v");
+    if (end == std::string::npos) {
+        return std::nullopt;
+    }
+    moduleName.erase(end + 1);
+
+    return moduleName;
+}
+
 std::optional<Luau::ModuleInfo> LSPPlatform::resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node)
 {
     // Handle require("path") for compatibility
     // In order to reduce complexity we assume any usage of string requires is only for Carpenter
     if (auto* expr = node->as<Luau::AstExprConstantString>())
     {
+        std::optional<std::string> commentRequiredString = getCommentRequireString(context, node);
+
+        if (commentRequiredString) {
+            std::optional<Luau::ModuleInfo> moduleInfo = resolveStringRequire(context, "@" + commentRequiredString.value());
+
+            if (moduleInfo) {
+                return moduleInfo;
+            }
+        }
+
         std::string requiredString(expr->value.data, expr->value.size);
         return resolveStringRequire(context, "@" + requiredString);
     }
