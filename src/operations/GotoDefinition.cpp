@@ -2,6 +2,7 @@
 
 #include "Luau/AstQuery.h"
 #include "LSP/LuauExt.hpp"
+#include "Platform/RobloxPlatform.hpp"
 
 #include <algorithm>
 
@@ -202,6 +203,26 @@ lsp::DefinitionResult WorkspaceFolder::gotoDefinition(const lsp::DefinitionParam
                     if (auto uri = platform->resolveToRealPath(moduleInfo->name))
                     {
                         result.emplace_back(lsp::Location{*uri, lsp::Range{{0, 0}, {0, 0}}});
+                    }
+                }
+            }
+
+            // Also handle shared("FileName") calls
+            if (auto call = ancestry[ancestry.size() - 2]->as<Luau::AstExprCall>(); call && types::matchShared(*call))
+            {
+                if (auto* str = call->args.data[0]->as<Luau::AstExprConstantString>())
+                {
+                    std::string fileName(str->value.data, str->value.size);
+                    if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
+                    {
+                        auto sharedResult = robloxPlatform->resolveSharedModuleName(fileName);
+                        if (sharedResult.status == SharedModuleResult::Found)
+                        {
+                            if (auto uri = platform->resolveToRealPath(sharedResult.moduleName))
+                            {
+                                result.emplace_back(lsp::Location{*uri, lsp::Range{{0, 0}, {0, 0}}});
+                            }
+                        }
                     }
                 }
             }

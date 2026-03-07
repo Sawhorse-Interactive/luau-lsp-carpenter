@@ -61,6 +61,20 @@ struct PluginNode
 /// E.g., "Model >> BasePart" → {"BasePart"}, "Part, TextLabel" → {"Part", "TextLabel"}
 std::vector<std::string> parseClassNamesFromSelector(const std::string& selector);
 
+struct SharedModuleResult
+{
+    enum Status
+    {
+        Found,
+        NotFound,
+        Ambiguous
+    };
+
+    Status status = NotFound;
+    Luau::ModuleName moduleName;
+    std::vector<Luau::ModuleName> allMatches;
+};
+
 class RobloxPlatform : public LSPPlatform
 {
 private:
@@ -75,6 +89,14 @@ private:
     static Luau::ModuleName getVirtualPathFromSourceNode(const SourceNode* sourceNode);
 
     void clearSourcemapTypes();
+
+    // Filename index for shared() resolution: maps lowercase stem -> list of (moduleName, relative path)
+    struct FileIndexEntry
+    {
+        Luau::ModuleName moduleName;
+        std::string relativePath; // relative to workspace root, without extension, using forward slashes
+    };
+    std::unordered_map<std::string, std::vector<FileIndexEntry>> fileNameIndex;
 
 public:
     // The root source node from a parsed Rojo source map
@@ -153,6 +175,15 @@ public:
     void onStudioPluginClear();
     bool handleNotification(const std::string& method, std::optional<json> params) override;
 
+    // shared() module resolution
+    void buildFileNameIndex();
+    void addFileToIndex(const Uri& uri, const Luau::ModuleName& moduleName);
+    void removeFileFromIndex(const Uri& uri);
+    SharedModuleResult resolveSharedModuleName(const std::string& name) const;
+
+    // Populate scope->importedTypeBindings for shared() calls in the given module
+    void populateSharedTypeBindings(
+        Luau::Frontend& frontend, const Luau::ModuleName& name, const Luau::ScopePtr& scope, bool forAutocomplete);
 
     using LSPPlatform::LSPPlatform;
 };

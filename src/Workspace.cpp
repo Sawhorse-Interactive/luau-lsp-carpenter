@@ -225,6 +225,15 @@ void WorkspaceFolder::onDidChangeWatchedFiles(const std::vector<lsp::FileEvent>&
             auto moduleName = fileResolver.getModuleName(change.uri);
             frontend.markDirty(moduleName, &dirtyFiles);
 
+            // Update filename index for shared() resolution
+            if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
+            {
+                if (change.type == lsp::FileChangeType::Created)
+                    robloxPlatform->addFileToIndex(change.uri, moduleName);
+                else if (change.type == lsp::FileChangeType::Deleted)
+                    robloxPlatform->removeFileFromIndex(change.uri);
+            }
+
             if (change.type == lsp::FileChangeType::Deleted)
                 deletedFiles.push_back(change.uri);
         }
@@ -405,6 +414,10 @@ void WorkspaceFolder::indexFiles(const ClientConfiguration& config)
 
     client->sendWorkDoneProgressEnd(kIndexProgressToken, "Indexed " + std::to_string(moduleNames.size()) + " files");
     client->sendTrace("workspace: indexing all files COMPLETED");
+
+    // Build filename index for shared() resolution
+    if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
+        robloxPlatform->buildFileNameIndex();
 }
 
 static void clearDisabledGlobals(const Client* client, const Luau::GlobalTypes& globalTypes, const std::vector<std::string>& disabledGlobals)
@@ -581,6 +594,17 @@ void WorkspaceFolder::registerTypes(const std::vector<std::string>& disabledGlob
     Luau::freeze(frontend.globals.globalTypes);
     if (!FFlag::LuauSolverV2)
         Luau::freeze(frontend.globalsForAutocomplete.globalTypes);
+
+    // Install a base prepareModuleScope for shared() type bindings.
+    // handleSourcemapUpdate will replace this with a richer callback that also handles sourcemap types.
+    if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
+    {
+        frontend.prepareModuleScope = [robloxPlatform, &fe = frontend](
+                                          const Luau::ModuleName& name, const Luau::ScopePtr& scope, bool forAutocomplete)
+        {
+            robloxPlatform->populateSharedTypeBindings(fe, name, scope, forAutocomplete);
+        };
+    }
 }
 
 void WorkspaceFolder::lazyInitialize()

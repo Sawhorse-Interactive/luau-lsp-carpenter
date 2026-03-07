@@ -177,6 +177,18 @@ std::optional<Luau::AstExpr*> matchRequire(const Luau::AstExprCall& call)
     return call.args.data[0];
 }
 
+std::optional<Luau::AstExpr*> matchShared(const Luau::AstExprCall& call)
+{
+    if (call.args.size < 1)
+        return std::nullopt;
+
+    const Luau::AstExprGlobal* funcAsGlobal = call.func->as<Luau::AstExprGlobal>();
+    if (!funcAsGlobal || funcAsGlobal->name != "shared")
+        return std::nullopt;
+
+    return call.args.data[0];
+}
+
 std::optional<lsp::Location> getTypeLocation(Luau::TypeId ty, WorkspaceFileResolver* fileResolver)
 {
     ty = Luau::follow(ty);

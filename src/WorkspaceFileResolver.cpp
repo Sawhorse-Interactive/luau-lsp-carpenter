@@ -4,6 +4,8 @@
 #include "Luau/Ast.h"
 #include "Luau/LuauConfig.h"
 #include "LSP/WorkspaceFileResolver.hpp"
+#include "LSP/LuauExt.hpp"
+#include "Platform/RobloxPlatform.hpp"
 
 #include "Luau/TimeTrace.h"
 #include "LuauFileUtils.hpp"
@@ -87,6 +89,29 @@ std::optional<Luau::ModuleInfo> WorkspaceFileResolver::resolveModule(
     const Luau::ModuleInfo* context, Luau::AstExpr* node, const Luau::TypeCheckLimits& limits)
 {
     return platform->resolveModule(context, node, limits);
+}
+
+std::optional<Luau::ModuleInfo> WorkspaceFileResolver::resolveRequireLikeImport(
+    const Luau::ModuleName& currentModule, const Luau::AstExprCall& call)
+{
+    auto maybeShared = types::matchShared(call);
+    if (!maybeShared)
+        return std::nullopt;
+
+    auto* str = (*maybeShared)->as<Luau::AstExprConstantString>();
+    if (!str)
+        return std::nullopt;
+
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform);
+    if (!robloxPlatform)
+        return std::nullopt;
+
+    std::string fileName(str->value.data, str->value.size);
+    auto result = robloxPlatform->resolveSharedModuleName(fileName);
+    if (result.status == SharedModuleResult::Found)
+        return Luau::ModuleInfo{result.moduleName};
+
+    return std::nullopt;
 }
 
 std::string WorkspaceFileResolver::getHumanReadableModuleName(const Luau::ModuleName& name) const

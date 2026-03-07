@@ -608,6 +608,8 @@ void RobloxPlatform::handleSourcemapUpdate(Luau::Frontend& frontend, const Luau:
         if (expressiveTypes || forAutocomplete)
             if (auto node = isVirtualPath(name) ? getSourceNodeFromVirtualPath(name) : getSourceNodeFromRealPath(fileResolver->getUri(name)))
                 scope->bindings[Luau::AstName("script")] = Luau::Binding{getSourcemapType(globals, instanceTypes, node.value())};
+
+        populateSharedTypeBindings(frontend, name, scope, forAutocomplete);
     };
 }
 

@@ -111,6 +111,7 @@ public:
 
     std::optional<Luau::SourceCode> readSource(const Luau::ModuleName& name) override;
     std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node, const Luau::TypeCheckLimits& limits) override;
+    std::optional<Luau::ModuleInfo> resolveRequireLikeImport(const Luau::ModuleName& currentModule, const Luau::AstExprCall& call) override;
     std::string getHumanReadableModuleName(const Luau::ModuleName& name) const override;
     const Luau::Config& getConfig(const Luau::ModuleName& name, const Luau::TypeCheckLimits& limits) const override;
     void clearConfigCache();

@@ -1,11 +1,13 @@
 #include "LSP/Workspace.hpp"
 #include "LSP/LanguageServer.hpp"
 #include "LSP/LuauExt.hpp"
+#include "Platform/RobloxPlatform.hpp"
 
 struct RequireInfo
 {
     Luau::AstExpr* require = nullptr;
     Luau::Location location;
+    bool isShared = false;
 };
 
 struct FindRequireVisitor : public Luau::AstVisitor
@@ -15,7 +17,9 @@ struct FindRequireVisitor : public Luau::AstVisitor
     bool visit(Luau::AstExprCall* call) override
     {
         if (auto maybeRequire = types::matchRequire(*call))
-            requireInfos.emplace_back(RequireInfo{*maybeRequire, call->argLocation});
+            requireInfos.emplace_back(RequireInfo{*maybeRequire, call->argLocation, false});
+        else if (auto maybeShared = types::matchShared(*call))
+            requireInfos.emplace_back(RequireInfo{*maybeShared, call->argLocation, true});
         return true;
     }
 
@@ -46,17 +50,35 @@ std::vector<lsp::DocumentLink> WorkspaceFolder::documentLink(const lsp::Document
 
     for (auto& require : visitor.requireInfos)
     {
-        if (auto moduleInfo = frontend.moduleResolver.resolveModuleInfo(moduleName, *require.require))
+        std::optional<Uri> resolvedUri;
+
+        if (require.isShared)
         {
-            // Resolve the module info to a URI
-            if (auto uri = platform->resolveToRealPath(moduleInfo->name))
+            // Resolve shared("FileName") by filename lookup
+            if (auto* str = require.require->as<Luau::AstExprConstantString>())
             {
-                lsp::DocumentLink link;
-                link.target = *uri;
-                link.range = lsp::Range{
-                    {require.location.begin.line, require.location.begin.column}, {require.location.end.line, require.location.end.column - 1}};
-                result.push_back(link);
+                std::string fileName(str->value.data, str->value.size);
+                if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
+                {
+                    auto sharedResult = robloxPlatform->resolveSharedModuleName(fileName);
+                    if (sharedResult.status == SharedModuleResult::Found)
+                        resolvedUri = platform->resolveToRealPath(sharedResult.moduleName);
+                }
             }
+        }
+        else
+        {
+            if (auto moduleInfo = frontend.moduleResolver.resolveModuleInfo(moduleName, *require.require))
+                resolvedUri = platform->resolveToRealPath(moduleInfo->name);
+        }
+
+        if (resolvedUri)
+        {
+            lsp::DocumentLink link;
+            link.target = *resolvedUri;
+            link.range = lsp::Range{
+                {require.location.begin.line, require.location.begin.column}, {require.location.end.line, require.location.end.column - 1}};
+            result.push_back(link);
         }
     }
 

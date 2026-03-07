@@ -64,12 +64,7 @@
       "description": "Path to build folder containing 'luau-lsp'",
       "default": "cmake-build-relwithdebinfo-visual-studio",
       "options": [
-        "cmake-build-debug-visual-studio",
-        "cmake-build-release-visual-studio",
-        "cmake-build-relwithdebinfo-visual-studio",
-        "cmake-build-debug",
-        "cmake-build-release",
-        "cmake-build-relwithdebinfo"
+        "build",
       ]
     }
   ]

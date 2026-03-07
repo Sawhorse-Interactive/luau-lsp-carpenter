@@ -108,6 +108,7 @@ target_sources(Luau.LanguageServer.Test PRIVATE
         tests/AutoImports.test.cpp
         tests/Bytecode.test.cpp
         tests/MagicFunctions.test.cpp
+        tests/Shared.test.cpp
         tests/Documentation.test.cpp
         tests/TextDocument.test.cpp
         tests/Uri.test.cpp
