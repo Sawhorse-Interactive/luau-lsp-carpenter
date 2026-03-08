@@ -2039,8 +2039,9 @@ TEST_CASE_FIXTURE(Fixture, "shared_old_solver_dependency_replacement_survives")
     Luau::FrontendOptions acOpts{true, true, false};
     workspace.frontend.check(consumerMod, acOpts);
 
-    // Get the consumer module from the autocomplete resolver
-    auto consumerModule = workspace.frontend.moduleResolverForAutocomplete.getModule(consumerMod);
+    // The new solver uses moduleResolver (not moduleResolverForAutocomplete).
+    auto& resolver = FFlag::LuauSolverV2 ? workspace.frontend.moduleResolver : workspace.frontend.moduleResolverForAutocomplete;
+    auto consumerModule = resolver.getModule(consumerMod);
     REQUIRE(consumerModule);
 
     // The consumer must retain the dependency
