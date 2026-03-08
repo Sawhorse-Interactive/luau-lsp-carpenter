@@ -1,9 +1,9 @@
-name: Update Luau Version
+name: Update Luau Version (DISABLED - fork uses modified Luau)
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "10 0 * * *" # Runs at 00:10 UTC every day
+  workflow_dispatch: # Manual only - auto-schedule disabled for this fork
+  # schedule:
+  #   - cron: "10 0 * * *" # Disabled: this fork modifies the Luau submodule
 
 jobs:
   sync:

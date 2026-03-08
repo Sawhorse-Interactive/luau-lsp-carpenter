@@ -1,9 +1,9 @@
-name: Nightly Release
+name: Nightly Release (DISABLED)
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 0 * * *" # Runs at 00:00 UTC every day
+  workflow_dispatch: # Manual only - auto-schedule disabled for this fork
+  # schedule:
+  #   - cron: "0 0 * * *" # Disabled for this fork
 
 env:
   MACOSX_DEPLOYMENT_TARGET: "10.15"

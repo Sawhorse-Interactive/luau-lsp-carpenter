@@ -2,15 +2,51 @@ name: Release
 
 on:
   push:
-    tags: ["*"]
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.1.0). Leave empty to auto-bump patch version."
+        required: false
+        type: string
 
 env:
   MACOSX_DEPLOYMENT_TARGET: "10.15"
 
 jobs:
+  resolve-version:
+    name: Resolve Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Tag push: strip leading 'v' from tag
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            # Manual dispatch with version provided
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Manual dispatch without version: auto-bump patch
+            CURRENT=$(jq -r '.version' editors/code/package.json)
+            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT" | cut -d. -f3)
+            PATCH=$((PATCH + 1))
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
   create-release:
     name: Create Release
+    needs: ["resolve-version"]
     runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -21,47 +57,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
+          tag_name: v${{ needs.resolve-version.outputs.version }}
+          release_name: v${{ needs.resolve-version.outputs.version }}
           draft: true
 
-  build-plugin:
-    needs: ["create-release"]
-    name: Build Roblox Studio Plugin
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ok-nick/setup-aftman@v0.4.2
-
-      - name: Build Plugin
-        run: rojo build plugin --output Luau.rbxm
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Luau.rbxm
-          path: Luau.rbxm
-
-      - name: Upload Plugin to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: Luau.rbxm
-          asset_name: Luau.rbxm
-          asset_content_type: application/octet-stream
-
-      - name: Publish Plugin to Roblox
-        env:
-          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
-        working-directory: plugin
-        run: |
-          rojo build test.project.json --output plugin_place.rbxl
-          lune run cloud/execute_task.luau plugin_place.rbxl cloud/publishing_task.luau
-
   dist:
-    needs: ["create-release"]
+    needs: ["resolve-version", "create-release"]
     strategy:
       fail-fast: false
       matrix:
@@ -69,19 +70,15 @@ jobs:
           - os: windows-latest
             artifact-name: luau-lsp-win64
             code-target: [win32-x64, win32-arm64]
-            crash-reporting: true
           - os: ubuntu-22.04
             artifact-name: luau-lsp-linux-x86_64
             code-target: [linux-x64]
-            crash-reporting: false
           - os: ubuntu-22.04-arm
             artifact-name: luau-lsp-linux-arm64
             code-target: [linux-arm64]
-            crash-reporting: false
           - os: macos-latest
             artifact-name: luau-lsp-macos
             code-target: [darwin-x64, darwin-arm64]
-            crash-reporting: true
 
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -96,23 +93,30 @@ jobs:
         with:
           node-version: 20
 
+      - name: Set Version
+        shell: bash
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.version }}"
+          jq ".version = \"$VERSION\"" editors/code/package.json > tmp.json && mv tmp.json editors/code/package.json
+          sed -i.bak "s/set(LSP_VERSION .*/set(LSP_VERSION \"$VERSION\")/g" CMakeLists.txt
+
       - name: Build Server
         run: |
           mkdir build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DLSP_STATIC_CRT:BOOL=ON -DLSP_BUILD_WITH_SENTRY:BOOL=${{ matrix.crash-reporting }}
+          cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DLSP_STATIC_CRT:BOOL=ON
           cmake --build . --config RelWithDebInfo --target Luau.LanguageServer.CLI -j 3
 
       - name: (MacOS) Verify universal build
         if: matrix.os == 'macos-latest'
         run: lipo -archs build/luau-lsp
 
-      - name: (MacOS) Separate debug symbols
+      - name: (MacOS) Strip debug symbols
         if: matrix.os == 'macos-latest'
-        run: dsymutil build/luau-lsp && strip -S build/luau-lsp
+        run: strip -S build/luau-lsp
 
-      - name: (Linux) Separate debug symbols
-        if: matrix.os == 'ubuntu-22.04' || matrix.os == 'ubuntu-22.04-arm'
-        run: objcopy --only-keep-debug build/luau-lsp build/luau-lsp.dbg && objcopy --strip-debug build/luau-lsp
+      - name: (Linux) Strip debug symbols
+        if: startsWith(matrix.os, 'ubuntu')
+        run: objcopy --strip-debug build/luau-lsp
 
       - name: Copy Build into Extension
         shell: bash
@@ -125,31 +129,6 @@ jobs:
             cp build/luau-lsp editors/code/bin/server
             chmod 777 editors/code/bin/server
           fi
-
-      - name: Copy Crashpad Handler into Extension
-        shell: bash
-        if: matrix.crash-reporting == true
-        run: |
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-              cp build/RelWithDebInfo/crashpad_handler.exe editors/code/bin/crashpad_handler.exe
-          else
-              cp build/crashpad_handler editors/code/bin/crashpad_handler
-              chmod 777 editors/code/bin/crashpad_handler
-          fi
-
-      - name: Setup Sentry CLI
-        uses: matbour/setup-sentry-cli@v2
-        if: matrix.crash-reporting == true
-        with:
-          token: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          organization: luau-lsp
-          project: luau-lsp
-
-      - name: Upload debug symbols
-        shell: bash
-        if: matrix.crash-reporting == true
-        run: |
-          sentry-cli debug-files upload --include-sources build
 
       - name: Create Release Archive
         shell: bash
@@ -197,7 +176,3 @@ jobs:
       - name: Publish Extension
         working-directory: editors/code
         run: npx @vscode/vsce publish --pat ${{ secrets.MARKETPLACE_TOKEN }} --target ${{ join(matrix.code-target, ' ') }}
-
-      - name: Publish OpenVSX Extension
-        working-directory: editors/code
-        run: npx ovsx publish --pat ${{ secrets.OVSX_TOKEN }} --target ${{ join(matrix.code-target, ' ') }}
