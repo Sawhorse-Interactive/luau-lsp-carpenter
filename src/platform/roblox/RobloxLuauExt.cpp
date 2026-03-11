@@ -1010,7 +1010,19 @@ void RobloxPlatform::addFileToIndex(const Uri& uri, const Luau::ModuleName& modu
     }
 
     std::string lowerStem = toLower(stem);
-    fileNameIndex[lowerStem].push_back(FileIndexEntry{moduleName, relPath});
+
+    // Remove any existing entry for the same module to avoid duplicates
+    // (e.g., when a git checkout triggers a Created event for an already-indexed file)
+    auto& entries = fileNameIndex[lowerStem];
+    entries.erase(
+        std::remove_if(entries.begin(), entries.end(),
+            [&](const FileIndexEntry& entry)
+            {
+                return entry.moduleName == moduleName;
+            }),
+        entries.end());
+
+    entries.push_back(FileIndexEntry{moduleName, relPath});
 }
 
 void RobloxPlatform::removeFileFromIndex(const Uri& uri)
