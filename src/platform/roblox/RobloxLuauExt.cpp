@@ -1011,14 +1011,16 @@ void RobloxPlatform::addFileToIndex(const Uri& uri, const Luau::ModuleName& modu
 
     std::string lowerStem = toLower(stem);
 
-    // Remove any existing entry for the same module to avoid duplicates
+    // Remove any existing entry for the same file to avoid duplicates
     // (e.g., when a git checkout triggers a Created event for an already-indexed file)
     auto& entries = fileNameIndex[lowerStem];
     entries.erase(
         std::remove_if(entries.begin(), entries.end(),
             [&](const FileIndexEntry& entry)
             {
-                return entry.moduleName == moduleName;
+                if (!fileResolver)
+                    return false;
+                return fileResolver->getUri(entry.moduleName) == uri;
             }),
         entries.end());
 
