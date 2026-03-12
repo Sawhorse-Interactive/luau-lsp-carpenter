@@ -2,6 +2,7 @@
 #include "Fixture.h"
 
 #include "LSP/IostreamHelpers.hpp"
+#include "Platform/RobloxPlatform.hpp"
 
 TEST_SUITE_BEGIN("GoToDefinition");
 
@@ -580,6 +581,751 @@ TEST_CASE_FIXTURE(Fixture, "go_to_definition_works_for_a_roblox_require_path")
     CHECK_EQ(result[0].uri, workspace.rootUri.resolvePath("source.luau"));
     CHECK_EQ(result[0].range.start, lsp::Position{0, 0});
     CHECK_EQ(result[0].range.end, lsp::Position{0, 0});
+}
+
+TEST_CASE_FIXTURE(Fixture, "cross_module_two_levels_deep_reexport_function_property")
+{
+    // Module A defines the table with the function
+    auto moduleA = newDocument("moduleA.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ModuleA");
+
+    // Module B re-exports Module A
+    auto moduleB = newDocument("moduleB.luau", R"(
+        --!strict
+        return require(game.Testing.ModuleA)
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ModuleB");
+
+    // Module C requires Module B and calls the method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utilities = require(game.Testing.ModuleB)
+
+        local y = utilities.useFu|nction("testing")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "cross_module_two_levels_deep_reexport_table_with_method")
+{
+    // Module A defines the table with the method
+    auto moduleA = newDocument("moduleA.luau", R"(
+        --!strict
+        local T = {
+            useFunction = function(x: string)
+            end,
+        }
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ModuleA");
+
+    // Module B re-exports Module A
+    auto moduleB = newDocument("moduleB.luau", R"(
+        --!strict
+        local A = require(game.Testing.ModuleA)
+        return A
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ModuleB");
+
+    // Module C requires Module B and calls the method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utilities = require(game.Testing.ModuleB)
+
+        local y = utilities.useFu|nction("testing")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 12});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 23});
+}
+
+TEST_CASE_FIXTURE(Fixture, "cross_module_three_levels_deep_reexport_function_property")
+{
+    // Module A defines the table with the function
+    auto moduleA = newDocument("moduleA.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ModuleA");
+
+    // Module B re-exports Module A
+    auto moduleB = newDocument("moduleB.luau", R"(
+        --!strict
+        return require(game.Testing.ModuleA)
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ModuleB");
+
+    // Module C re-exports Module B
+    auto moduleC = newDocument("moduleC.luau", R"(
+        --!strict
+        return require(game.Testing.ModuleB)
+    )");
+    registerDocumentForVirtualPath(moduleC, "game/Testing/ModuleC");
+
+    // Module D requires Module C and calls the method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utilities = require(game.Testing.ModuleC)
+
+        local y = utilities.useFu|nction("testing")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "cross_module_two_levels_deep_wrapper_table")
+{
+    // Module A defines a table with a function
+    auto moduleA = newDocument("moduleA.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ModuleA");
+
+    // Module B wraps Module A's export into a new table
+    auto moduleB = newDocument("moduleB.luau", R"(
+        --!strict
+        local A = require(game.Testing.ModuleA)
+        return { tools = A }
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ModuleB");
+
+    // Module C requires Module B and calls the nested method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local B = require(game.Testing.ModuleB)
+
+        local y = B.tools.useFu|nction("testing")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "cross_module_two_levels_deep_oop_method")
+{
+    // Module A defines a class with OOP pattern
+    auto moduleA = newDocument("moduleA.luau", R"(
+        --!strict
+        local Class = {}
+        Class.__index = Class
+
+        function Class.new()
+            return setmetatable({}, Class)
+        end
+
+        function Class:method()
+        end
+
+        return Class
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ModuleA");
+
+    // Module B re-exports Module A
+    auto moduleB = newDocument("moduleB.luau", R"(
+        --!strict
+        return require(game.Testing.ModuleA)
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ModuleB");
+
+    // Module C requires Module B and calls the method on an instance
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local Class = require(game.Testing.ModuleB)
+        local obj = Class.new()
+
+        obj:met|hod()
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+}
+
+TEST_CASE_FIXTURE(Fixture, "cross_module_two_levels_deep_type_annotation")
+{
+    // Module A defines an exported type
+    auto moduleA = newDocument("moduleA.luau", R"(
+        --!strict
+        export type Config = {
+            init: (self: Config) -> (),
+            update: (self: Config, dt: number) -> (),
+        }
+
+        return {}
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ModuleA");
+
+    // Module B requires Module A and re-exports the type
+    auto moduleB = newDocument("moduleB.luau", R"(
+        --!strict
+        local Types = require(game.Testing.ModuleA)
+
+        export type Config = Types.Config
+
+        return {}
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ModuleB");
+
+    // Module C uses Module B's type and tries to go to the property definition
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local B = require(game.Testing.ModuleB)
+
+        local cfg: B.Config = {} :: any
+        cfg:in|it()
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 12});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 16});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_on_method_two_levels_deep")
+{
+    // Module A defines the table with the function
+    auto moduleA = newDocument("ModuleA.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ModuleA");
+
+    // Module B requires Module A and re-exports
+    auto moduleB = newDocument("ModuleB.luau", R"(
+        --!strict
+        return require(game.Testing.ModuleA)
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ModuleB");
+
+    // Add Module B to the shared file index
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleBName = workspace.fileResolver.getModuleName(moduleB);
+    robloxPlatform->addFileToIndex(moduleB, moduleBName);
+
+    // Pre-check dependencies
+    workspace.frontend.check(workspace.fileResolver.getModuleName(moduleA));
+    workspace.frontend.check(moduleBName);
+
+    // Module C uses shared("ModuleB") and calls the method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utilities = shared("ModuleB")
+
+        local y = utilities.useFu|nction("testing")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_on_method_direct")
+{
+    // Module A defines the table with the function
+    auto moduleA = newDocument("DirectModule.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+
+        return T
+    )");
+
+    // Add to the shared file index
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleAName = workspace.fileResolver.getModuleName(moduleA);
+    robloxPlatform->addFileToIndex(moduleA, moduleAName);
+
+    // Pre-check
+    workspace.frontend.check(moduleAName);
+
+    // Module C uses shared("DirectModule") and calls the method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utilities = shared("DirectModule")
+
+        local y = utilities.useFu|nction("testing")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_on_method_oop_two_levels_deep")
+{
+    // Module A defines an OOP class
+    auto moduleA = newDocument("ClassModule.luau", R"(
+        --!strict
+        local Class = {}
+        Class.__index = Class
+
+        function Class.new()
+            return setmetatable({}, Class)
+        end
+
+        function Class:method()
+        end
+
+        return Class
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/ClassModule");
+
+    // Module B requires and re-exports Module A
+    auto moduleB = newDocument("ClassProxy.luau", R"(
+        --!strict
+        return require(game.Testing.ClassModule)
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/ClassProxy");
+
+    // Add Module B to shared index
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleBName = workspace.fileResolver.getModuleName(moduleB);
+    robloxPlatform->addFileToIndex(moduleB, moduleBName);
+
+    // Pre-check
+    workspace.frontend.check(workspace.fileResolver.getModuleName(moduleA));
+    workspace.frontend.check(moduleBName);
+
+    // Module C uses shared, creates instance, calls method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local Class = shared("ClassProxy")
+        local obj = Class.new()
+
+        obj:met|hod()
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_on_inlined_table_method_two_levels")
+{
+    // Module A defines a table with inline methods
+    auto moduleA = newDocument("InlineModule.luau", R"(
+        --!strict
+        local T = {
+            doStuff = function(x: string)
+            end,
+        }
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/InlineModule");
+
+    // Module B re-exports via variable
+    auto moduleB = newDocument("InlineProxy.luau", R"(
+        --!strict
+        local A = require(game.Testing.InlineModule)
+        return A
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/InlineProxy");
+
+    // Add Module B to shared index
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleBName = workspace.fileResolver.getModuleName(moduleB);
+    robloxPlatform->addFileToIndex(moduleB, moduleBName);
+
+    // Pre-check
+    workspace.frontend.check(workspace.fileResolver.getModuleName(moduleA));
+    workspace.frontend.check(moduleBName);
+
+    // Module C uses shared and calls the method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utils = shared("InlineProxy")
+
+        utils.doSt|uff("test")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 12});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 19});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_on_named_function_two_levels")
+{
+    // Module A defines named functions on the table
+    auto moduleA = newDocument("NamedFnModule.luau", R"(
+        --!strict
+        local T = {}
+        function T.doStuff(x: string)
+        end
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/NamedFnModule");
+
+    // Module B re-exports
+    auto moduleB = newDocument("NamedFnProxy.luau", R"(
+        --!strict
+        local A = require(game.Testing.NamedFnModule)
+        return A
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/NamedFnProxy");
+
+    // Add Module B to shared index
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleBName = workspace.fileResolver.getModuleName(moduleB);
+    robloxPlatform->addFileToIndex(moduleB, moduleBName);
+
+    // Pre-check
+    workspace.frontend.check(workspace.fileResolver.getModuleName(moduleA));
+    workspace.frontend.check(moduleBName);
+
+    // Module C uses shared and calls the method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utils = shared("NamedFnProxy")
+
+        utils.doSt|uff("test")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 26});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_no_precheck_two_levels")
+{
+    // Module A defines the table with the function
+    auto moduleA = newDocument("NoPrecheckA.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/NoPrecheckA");
+
+    // Module B requires and re-exports Module A
+    auto moduleB = newDocument("NoPrecheckB.luau", R"(
+        --!strict
+        return require(game.Testing.NoPrecheckA)
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/NoPrecheckB");
+
+    // Add Module B to shared index (but do NOT pre-check anything)
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleBName = workspace.fileResolver.getModuleName(moduleB);
+    robloxPlatform->addFileToIndex(moduleB, moduleBName);
+
+    // Module C uses shared (no pre-checking of dependencies)
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utils = shared("NoPrecheckB")
+
+        utils.useFu|nction("test")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_after_checkSimple_then_checkStrict")
+{
+    // Mimics real LSP: diagnostics run checkSimple first, then hover/gotodef runs checkStrict
+    auto moduleA = newDocument("SeqCheckA.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+        return T
+    )");
+    registerDocumentForVirtualPath(moduleA, "game/Testing/SeqCheckA");
+
+    auto moduleB = newDocument("SeqCheckB.luau", R"(
+        --!strict
+        return require(game.Testing.SeqCheckA)
+    )");
+    registerDocumentForVirtualPath(moduleB, "game/Testing/SeqCheckB");
+
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleBName = workspace.fileResolver.getModuleName(moduleB);
+    robloxPlatform->addFileToIndex(moduleB, moduleBName);
+
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utils = shared("SeqCheckB")
+
+        utils.useFu|nction("test")
+    )");
+    auto document = newDocument("main.luau", source);
+    auto mainModName = workspace.fileResolver.getModuleName(document);
+
+    // Step 1: checkSimple (diagnostics path, does not retain type graphs)
+    workspace.checkSimple(mainModName, nullptr);
+
+    // Step 2: gotoDefinition (calls checkStrict internally)
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_with_sourcemap_two_levels")
+{
+    loadSourcemap(R"({
+        "name": "Game",
+        "className": "DataModel",
+        "children": [
+            {
+                "name": "ReplicatedStorage",
+                "className": "ReplicatedStorage",
+                "children": [
+                    {
+                        "name": "ModuleA",
+                        "className": "ModuleScript",
+                        "filePaths": ["ModuleA.luau"]
+                    },
+                    {
+                        "name": "ModuleB",
+                        "className": "ModuleScript",
+                        "filePaths": ["ModuleB.luau"]
+                    }
+                ]
+            },
+            {
+                "name": "ServerScriptService",
+                "className": "ServerScriptService",
+                "children": [
+                    {
+                        "name": "Main",
+                        "className": "Script",
+                        "filePaths": ["main.luau"]
+                    }
+                ]
+            }
+        ]
+    })");
+
+    // Module A defines the table with the function
+    auto moduleA = newDocument("ModuleA.luau", R"(
+        --!strict
+        local T = {}
+        function T.useFunction(x: string)
+        end
+        return T
+    )");
+
+    // Module B requires and re-exports Module A
+    auto moduleB = newDocument("ModuleB.luau", R"(
+        --!strict
+        return require(game.ReplicatedStorage.ModuleA)
+    )");
+
+    // Add Module B to shared file index
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleBName = workspace.fileResolver.getModuleName(moduleB);
+    robloxPlatform->addFileToIndex(moduleB, moduleBName);
+
+    // Module C uses shared("ModuleB") and calls method
+    auto [source, position] = sourceWithMarker(R"(
+        --!strict
+        local utils = shared("ModuleB")
+
+        utils.useFu|nction("test")
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    CHECK_EQ(result[0].uri, moduleA);
+    CHECK_EQ(result[0].range.start, lsp::Position{3, 19});
+    CHECK_EQ(result[0].range.end, lsp::Position{3, 30});
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_go_to_definition_type_cast_property_two_levels")
+{
+    // Signal module defines a generic type with a Connect method
+    auto signalModule = newDocument("Signal.luau", R"(
+        export type Connection = {
+            Disconnect: (self: Connection) -> (),
+            Connected: boolean,
+        }
+
+        export type Signal<T... = ...any> = {
+            Fire: (self: Signal<T...>, T...) -> (),
+            Connect: (self: Signal<T...>, fn: (T...) -> ()) -> Connection,
+            Once: (self: Signal<T...>, fn: (T...) -> ()) -> Connection,
+            DisconnectAll: (self: Signal<T...>) -> (),
+            Destroy: (self: Signal<T...>) -> (),
+            Wait: (self: Signal<T...>) -> T...,
+        }
+
+        local Signal = {}
+
+        function Signal.new(): Signal
+            return {} :: any
+        end
+
+        return Signal
+    )");
+    registerDocumentForVirtualPath(signalModule, "game/Shared/Signal");
+
+    // DragonAttacksClient uses shared("Signal") and creates Signal instances
+    auto dragonModule = newDocument("DragonAttacksClient.luau", R"(
+        local Signal = shared("Signal")
+
+        local DragonAttacksClient = {}
+        DragonAttacksClient.MeleeStarted = Signal.new() :: Signal.Signal
+        DragonAttacksClient.ProjectileShot = Signal.new() :: Signal.Signal
+
+        return DragonAttacksClient
+    )");
+    registerDocumentForVirtualPath(dragonModule, "game/Client/DragonAttacksClient");
+
+    // Set up shared file index for both modules
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    robloxPlatform->addFileToIndex(signalModule, workspace.fileResolver.getModuleName(signalModule));
+    robloxPlatform->addFileToIndex(dragonModule, workspace.fileResolver.getModuleName(dragonModule));
+
+    // Pre-check
+    workspace.frontend.check(workspace.fileResolver.getModuleName(signalModule));
+    workspace.frontend.check(workspace.fileResolver.getModuleName(dragonModule));
+
+    // FtuxEnemiesController uses shared("DragonAttacksClient") and calls :Connect
+    auto [source, position] = sourceWithMarker(R"(
+        local DragonAttacksClient = shared("DragonAttacksClient")
+
+        DragonAttacksClient.ProjectileShot:Conn|ect(function()
+        end)
+    )");
+    auto document = newDocument("main.luau", source);
+
+    auto params = lsp::DefinitionParams{};
+    params.textDocument = lsp::TextDocumentIdentifier{document};
+    params.position = position;
+
+    auto result = workspace.gotoDefinition(params, nullptr);
+    REQUIRE_EQ(result.size(), 1);
+    // Should navigate to Signal.luau where Connect is defined, NOT DragonAttacksClient.luau
+    CHECK_EQ(result[0].uri, signalModule);
 }
 
 TEST_CASE_FIXTURE(Fixture, "property_on_table_type_without_actual_definition")
