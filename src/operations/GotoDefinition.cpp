@@ -24,7 +24,37 @@ static std::optional<LocationInformation> findLocationForSymbol(
     return LocationInformation{Luau::getDefinitionModuleName(*ty), getLocation(*ty), *ty};
 }
 
-static std::vector<LocationInformation> findLocationsForIndex(const Luau::ModulePtr& module, const Luau::AstExpr* base, const Luau::Name& name)
+// When a generic type alias (e.g. Signal<T...>) is instantiated in a different module,
+// the ConstraintSolver clones the table and overwrites its definitionModuleName with the
+// instantiating module's name. But the property locations still reference the original
+// module where the type was defined. This function detects that case and finds the
+// original module by searching exportedTypeBindings in loaded modules.
+static std::optional<std::string> getDefinitionModuleForType(
+    Luau::TypeId baseTy, const Luau::Frontend& frontend)
+{
+    auto defMod = Luau::getDefinitionModuleName(baseTy);
+
+    if (auto ttv = Luau::get<Luau::TableType>(Luau::follow(baseTy)))
+    {
+        if (ttv->name)
+        {
+            for (const auto& [moduleName, sourceNode] : frontend.sourceNodes)
+            {
+                auto mod = frontend.moduleResolver.getModule(moduleName);
+                if (!mod)
+                    continue;
+                auto it = mod->exportedTypeBindings.find(*ttv->name);
+                if (it != mod->exportedTypeBindings.end())
+                    return moduleName;
+            }
+        }
+    }
+
+    return defMod;
+}
+
+static std::vector<LocationInformation> findLocationsForIndex(
+    const Luau::ModulePtr& module, const Luau::AstExpr* base, const Luau::Name& name, const Luau::Frontend& frontend)
 {
     auto baseTy = module->astTypes.find(base);
     if (!baseTy)
@@ -46,13 +76,19 @@ static std::vector<LocationInformation> findLocationsForIndex(const Luau::Module
                 return existing.location == location;
             });
         if (!isDuplicate)
-            results.push_back(LocationInformation{Luau::getDefinitionModuleName(realBaseTy), location, *prop.readTy});
+        {
+            auto defModuleName = !prop.location && prop.typeLocation
+                ? getDefinitionModuleForType(realBaseTy, frontend)
+                : Luau::getDefinitionModuleName(realBaseTy);
+            results.push_back(LocationInformation{defModuleName, location, *prop.readTy});
+        }
     }
 
     return results;
 }
 
-static std::vector<LocationInformation> findLocationsForExpr(const Luau::ModulePtr& module, const Luau::AstExpr* expr, const Luau::Position& position)
+static std::vector<LocationInformation> findLocationsForExpr(
+    const Luau::ModulePtr& module, const Luau::AstExpr* expr, const Luau::Position& position, const Luau::Frontend& frontend)
 {
     if (auto local = expr->as<Luau::AstExprLocal>())
     {
@@ -65,11 +101,11 @@ static std::vector<LocationInformation> findLocationsForExpr(const Luau::ModuleP
             return {*loc};
     }
     else if (auto indexname = expr->as<Luau::AstExprIndexName>())
-        return findLocationsForIndex(module, indexname->expr, indexname->index.value);
+        return findLocationsForIndex(module, indexname->expr, indexname->index.value, frontend);
     else if (auto indexexpr = expr->as<Luau::AstExprIndexExpr>())
     {
         if (auto string = indexexpr->index->as<Luau::AstExprConstantString>())
-            return findLocationsForIndex(module, indexexpr->expr, std::string(string->value.data, string->value.size));
+            return findLocationsForIndex(module, indexexpr->expr, std::string(string->value.data, string->value.size), frontend);
     }
 
     return {};
@@ -127,7 +163,7 @@ lsp::DefinitionResult WorkspaceFolder::gotoDefinition(const lsp::DefinitionParam
 
     if (auto expr = node->asExpr())
     {
-        for (const auto& [definitionModuleName, location, _] : findLocationsForExpr(module, expr, position))
+        for (const auto& [definitionModuleName, location, _] : findLocationsForExpr(module, expr, position, frontend))
         {
             if (location)
             {
