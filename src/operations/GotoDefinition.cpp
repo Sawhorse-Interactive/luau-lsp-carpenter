@@ -38,15 +38,41 @@ static std::optional<std::string> getDefinitionModuleForType(
     {
         if (ttv->name)
         {
+            std::optional<std::string> firstMatch;
             for (const auto& [moduleName, sourceNode] : frontend.sourceNodes)
             {
                 auto mod = frontend.moduleResolver.getModule(moduleName);
                 if (!mod)
                     continue;
                 auto it = mod->exportedTypeBindings.find(*ttv->name);
-                if (it != mod->exportedTypeBindings.end())
+                if (it == mod->exportedTypeBindings.end())
+                    continue;
+
+                if (!firstMatch)
+                    firstMatch = moduleName;
+
+                // Prefer the module that originally defines the type
+                // A re-exporting module imports another module that also exports the same type name.
+                bool isReExport = false;
+                if (mod->hasModuleScope())
+                {
+                    for (const auto& [importName, importedModuleName] : mod->getModuleScope()->importedModules)
+                    {
+                        auto importedMod = frontend.moduleResolver.getModule(importedModuleName);
+                        if (importedMod && importedMod->exportedTypeBindings.count(*ttv->name))
+                        {
+                            isReExport = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!isReExport)
                     return moduleName;
             }
+
+            if (firstMatch)
+                return *firstMatch;
         }
     }
 
