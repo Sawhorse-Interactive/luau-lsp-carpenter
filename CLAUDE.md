@@ -1,60 +1,14 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 Luau Language Server (luau-lsp) is an implementation of the Language Server Protocol (LSP) for the Luau programming language. It provides IDE features like diagnostics, autocompletion, hover, go-to-definition, etc. The project also includes a standalone CLI (`luau-lsp analyze`) for CI type-checking and linting.
 
-## Build Commands
+## Memories
 
-```bash
-# Initial clone (submodules required)
-git clone https://github.com/JohnnyMorganz/luau-lsp.git --recurse-submodules
+Always read these memory files at the start of a conversation. After reading each one, output `[MEMORY_NAME]` (e.g. `[MEMORY.md]`, `[building.md]`) to confirm it was loaded.
 
-# Update submodules
-git submodule update --init --recursive
-
-# Configure build (from repo root)
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Debug  # Use Debug for faster builds during development
-
-# Build the CLI (use -j for parallel builds)
-NUM_CPUS=$(nproc)
-cmake --build . --target Luau.LanguageServer.CLI --config Debug -j$NUM_CPUS
-
-# Build tests (use Debug for faster iteration)
-cmake --build . --target Luau.LanguageServer.Test --config Debug -j$NUM_CPUS
-
-# For release/production builds, use Release mode:
-# cmake .. -DCMAKE_BUILD_TYPE=Release
-# cmake --build . --target Luau.LanguageServer.CLI --config Release -j$NUM_CPUS
-
-# Build with ASAN (Linux/macOS)
-cmake .. -DLSP_BUILD_ASAN:BOOL=ON
-cmake --build . --target Luau.LanguageServer.Test -j$NUM_CPUS
-```
-
-## Running Tests
-
-Tests use the doctest framework. **Important:** Run tests from the repository root directory, as tests read from `tests/testdata/` using relative paths.
-
-```bash
-# Run all tests (from repo root)
-./build/Luau.LanguageServer.Test
-
-# Run with new type solver
-./build/Luau.LanguageServer.Test --new-solver
-
-# Run with all FFlags enabled
-./build/Luau.LanguageServer.Test --fflags=true
-
-# Run specific test by name
-./build/Luau.LanguageServer.Test --test-case="TestName"
-
-# List all tests
-./build/Luau.LanguageServer.Test --list-test-cases
-```
+- [.claude/memory/MEMORY.md](.claude/memory/MEMORY.md) - Index of user preferences and key patterns
+- [.claude/memory/building.md](.claude/memory/building.md) - How to build and test
+- [.claude/memory/shared-feature.md](.claude/memory/shared-feature.md) - The `shared("FileName")` module resolution feature
 
 ## Architecture
 
@@ -109,8 +63,7 @@ Located in `extern/` and `luau/`:
 
 ## Committing Changes
 
-- For user-facing changes (particularly when responding to a GitHub issue), make sure there is always an entry in `CHANGELOG.md`
-- Commit messages should reference the GitHub issue in the commit body, not the header (e.g., `Fixes #1234`, `Closes #1234`)
+- Do NOT add `Co-Authored-By: Claude ...` lines to commit messages
 
 ## Testing Patterns
 
