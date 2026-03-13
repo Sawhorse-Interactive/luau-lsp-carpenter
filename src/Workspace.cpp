@@ -241,7 +241,20 @@ void WorkspaceFolder::onDidChangeWatchedFiles(const std::vector<lsp::FileEvent>&
 
     // Parse require graph for files if indexing enable
     if (config.index.enabled && appliedFirstTimeConfiguration)
+    {
         frontend.parseModules(dirtyFiles);
+
+        // Re-mark source modules dirty so that frontend.check() will re-read
+        // them from disk. parseModules clears dirtySourceModule after parsing,
+        // but the on-disk content may have been read mid-write (e.g. during a
+        // git checkout). Keeping dirtySourceModule=true ensures the file is
+        // re-read when type checking actually needs it.
+        for (const auto& moduleName : dirtyFiles)
+        {
+            if (auto it = frontend.sourceNodes.find(moduleName); it != frontend.sourceNodes.end())
+                it->second->dirtySourceModule = true;
+        }
+    }
 
     // Clear the diagnostics for files in case it was not managed
     clearDiagnosticsForFiles(deletedFiles);
