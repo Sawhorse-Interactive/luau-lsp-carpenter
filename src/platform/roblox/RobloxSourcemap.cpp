@@ -427,6 +427,12 @@ void RobloxPlatform::updateSourcemapTypes()
         handleSourcemapUpdate(workspaceFolder->frontend, workspaceFolder->frontend.globalsForAutocomplete, expressiveTypes);
     }
 
+    // Rebuild file name index: the sourcemap update may have changed virtual path
+    // module names, so the old index entries would have stale module names.
+    // This must happen before recomputeDiagnostics so that shared() calls
+    // resolve to the correct (new) module names.
+    buildFileNameIndex();
+
     if (expressiveTypes)
     {
         workspaceFolder->client->sendTrace("Refreshing diagnostics from sourcemap update as strictDatamodelTypes is enabled");

@@ -30,6 +30,33 @@ TEST_CASE_FIXTURE(Fixture, "shared_resolves_module_by_filename")
     CHECK(ttv != nullptr);
 }
 
+TEST_CASE_FIXTURE(Fixture, "shared_resolves_without_manual_precheck")
+{
+    // Tests that the RequireTracer dependency tracking works for shared() calls
+    // i.e., the shared module is automatically checked as a dependency
+    auto moduleUri = newDocument("AutoModule.luau", R"(
+        return { value = 42 }
+    )");
+
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    auto moduleName = workspace.fileResolver.getModuleName(moduleUri);
+    robloxPlatform->addFileToIndex(moduleUri, moduleName);
+
+    // NOTE: No manual pre-check of the shared module!
+    // The RequireTracer should detect shared("AutoModule") as a dependency
+    // and the frontend should check it automatically before checking the consumer.
+    auto result = check(R"(
+        local mod = shared("AutoModule")
+    )");
+
+    LUAU_LSP_REQUIRE_NO_ERRORS(result);
+
+    auto ty = requireType("mod");
+    auto ttv = Luau::get<Luau::TableType>(Luau::follow(ty));
+    CHECK(ttv != nullptr);
+}
+
 TEST_CASE_FIXTURE(Fixture, "shared_error_when_not_found")
 {
     auto result = check(R"(
