@@ -224,7 +224,7 @@ std::optional<lsp::Hover> WorkspaceFolder::hover(const lsp::HoverParams& params,
                     }
 
                     // Look up property documentation from the expected table type
-                    if (auto parentTy = module->astTypes.find(parent))
+                    if (auto parentTy = module->astExpectedTypes.find(parent))
                     {
                         auto followedParentTy = Luau::follow(*parentTy);
                         if (auto keyStr = key->as<Luau::AstExprConstantString>())
