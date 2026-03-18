@@ -241,6 +241,26 @@ std::string printMoonwaveDocumentation(const std::vector<std::string>& comments)
     return result;
 }
 
+std::optional<std::string> extractMoonwaveParamDoc(const std::vector<std::string>& comments, const std::string& paramName)
+{
+    for (auto& comment : comments)
+    {
+        if (Luau::startsWith(comment, "@param "))
+        {
+            auto paramText = comment.substr(7);
+            auto spacePos = paramText.find(' ');
+            auto name = (spacePos != std::string::npos) ? paramText.substr(0, spacePos) : paramText;
+            if (name == paramName)
+            {
+                if (spacePos != std::string::npos)
+                    return paramText.substr(spacePos + 1);
+                return std::string{};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 struct AttachCommentsVisitor : public Luau::AstVisitor
 {
     Luau::Position pos;
@@ -442,13 +462,16 @@ std::vector<std::string> WorkspaceFolder::getComments(const Luau::ModuleName& mo
         // Parse the comment text for information
         if (comment.type == Luau::Lexeme::Type::Comment)
         {
-            if (Luau::startsWith(commentText, "--- "))
+            if (Luau::startsWith(commentText, "---"))
             {
-                comments.emplace_back(commentText.substr(4));
-            }
-            else if (commentText == "---")
-            {
-                comments.emplace_back("\n");
+                auto content = commentText.substr(3);
+                if (!content.empty() && content[0] == ' ')
+                    content = content.substr(1);
+
+                if (content.empty())
+                    comments.emplace_back("\n");
+                else
+                    comments.emplace_back(content);
             }
         }
         else if (comment.type == Luau::Lexeme::Type::BlockComment)

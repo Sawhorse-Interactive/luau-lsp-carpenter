@@ -409,6 +409,112 @@ TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_external_type_references"
     CHECK_EQ(result->contents.value, codeBlock("luau", "type Types.Value = string") + kDocumentationBreaker + "This is a type\n");
 }
 
+TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_cross_module_type_property_without_assignment")
+{
+    newDocument("types.luau", R"(
+        export type Foo = {
+            --- This is documentation for Baz
+            Baz: any?,
+        }
+    )");
+
+    auto uri = newDocument("source.luau", R"(
+        local Types = require("types.luau")
+        local x: Types.Foo = nil :: any
+        local y = x.Baz
+    )");
+
+    lsp::HoverParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = lsp::Position{3, 21};
+
+    auto result = workspace.hover(params, nullptr);
+    REQUIRE(result);
+    CHECK(result->contents.value.find("This is documentation for Baz") != std::string::npos);
+}
+
+TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_cross_module_type_property_with_assignment")
+{
+    newDocument("module_a.luau", R"(
+        export type Foo = {
+            --- This is documentation for Baz
+            Baz: any?,
+        }
+        local M: Foo = {} :: any
+        M.Baz = "Goodbye"
+        return M
+    )");
+
+    auto uri = newDocument("source.luau", R"(
+        local M = require("module_a.luau")
+        local x = M.Baz
+    )");
+
+    lsp::HoverParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = lsp::Position{2, 21};
+
+    auto result = workspace.hover(params, nullptr);
+    REQUIRE(result);
+    CHECK(result->contents.value.find("This is documentation for Baz") != std::string::npos);
+}
+
+TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_table_literal_key_from_type")
+{
+    auto source = R"(
+        export type Foo = {
+            --- Hello, this is a key!
+            Bar: any?,
+        }
+
+        function Test(arg: Foo)
+        end
+
+        Test({
+            Bar = "Hello, world!"
+        })
+    )";
+
+    auto uri = newDocument("foo.luau", source);
+
+    lsp::HoverParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = lsp::Position{11, 13}; // hovering on 'Bar' in table literal
+
+    auto result = workspace.hover(params, nullptr);
+    REQUIRE(result);
+    CHECK(result->contents.value.find("Hello, this is a key!") != std::string::npos);
+}
+
+TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_table_literal_key_from_cross_module_type")
+{
+    newDocument("types.luau", R"(
+        export type Foo = {
+            --- Hello, this is a key!
+            Bar: any?,
+        }
+    )");
+
+    auto uri = newDocument("source.luau", R"(
+        local Types = require("types.luau")
+
+        function Test(arg: Types.Foo)
+        end
+
+        Test({
+            Bar = "Hello, world!"
+        })
+    )");
+
+    lsp::HoverParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = lsp::Position{6, 13}; // hovering on 'Bar' in table literal
+
+    auto result = workspace.hover(params, nullptr);
+    REQUIRE(result);
+    CHECK(result->contents.value.find("Hello, this is a key!") != std::string::npos);
+}
+
 TEST_CASE_FIXTURE(Fixture, "show_type_of_global_variable")
 {
     auto source = R"(

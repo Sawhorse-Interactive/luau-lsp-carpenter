@@ -133,4 +133,62 @@ TEST_CASE_FIXTURE(Fixture, "signature_help_does_not_show_first_argument_on_metho
     CHECK_EQ(std::get<std::vector<size_t>>(result->signatures[0].parameters->at(0).label), std::vector<size_t>{22, 28});
 }
 
+TEST_CASE_FIXTURE(Fixture, "signature_help_shows_moonwave_param_documentation")
+{
+    auto [source, marker] = sourceWithMarker(R"(
+        --- Does something cool
+        --- @param x number -- The input number
+        --- @param y string -- The name
+        function foo(x: number, y: string)
+        end
+
+        foo(|)
+    )");
+
+    auto uri = newDocument("foo.luau", source);
+
+    lsp::SignatureHelpParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = marker;
+
+    auto result = workspace.signatureHelp(params, nullptr);
+    REQUIRE(result);
+    REQUIRE_EQ(result->signatures.size(), 1);
+    REQUIRE(result->signatures[0].parameters);
+    REQUIRE_EQ(result->signatures[0].parameters->size(), 2);
+
+    CHECK_EQ(result->signatures[0].parameters->at(0).documentation->value, "number -- The input number");
+    CHECK_EQ(result->signatures[0].parameters->at(1).documentation->value, "string -- The name");
+}
+
+TEST_CASE_FIXTURE(Fixture, "signature_help_shows_moonwave_param_documentation_from_block_comment")
+{
+    auto [source, marker] = sourceWithMarker(R"(
+        --[=[
+            Does something cool
+            @param x number -- The input number
+            @param y string -- The name
+        ]=]
+        function foo(x: number, y: string)
+        end
+
+        foo(1, |)
+    )");
+
+    auto uri = newDocument("foo.luau", source);
+
+    lsp::SignatureHelpParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = marker;
+
+    auto result = workspace.signatureHelp(params, nullptr);
+    REQUIRE(result);
+    REQUIRE_EQ(result->signatures.size(), 1);
+    REQUIRE(result->signatures[0].parameters);
+    REQUIRE_EQ(result->signatures[0].parameters->size(), 2);
+
+    CHECK_EQ(result->signatures[0].parameters->at(0).documentation->value, "number -- The input number");
+    CHECK_EQ(result->signatures[0].parameters->at(1).documentation->value, "string -- The name");
+}
+
 TEST_SUITE_END();
