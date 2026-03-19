@@ -425,6 +425,7 @@ EXTRA_MEMBERS = {
 # Hardcoded types
 # These will go before anything else, and are useful to define for other tools
 START_BASE = """
+type CollectionHandle = any
 type ContentId = string
 type ProtectedString = string
 type BinaryString = string
