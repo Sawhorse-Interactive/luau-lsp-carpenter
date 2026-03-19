@@ -2,7 +2,16 @@
 #include "Fixture.h"
 #include "Platform/RobloxPlatform.hpp"
 #include "LSP/LuauExt.hpp"
+#include "LSP/Completion.hpp"
 #include "Luau/Parser.h"
+
+static std::optional<lsp::CompletionItem> getItem(const std::vector<lsp::CompletionItem>& items, const std::string& label)
+{
+    for (const auto& item : items)
+        if (item.label == label)
+            return item;
+    return std::nullopt;
+}
 
 TEST_SUITE_BEGIN("SharedModuleResolution");
 
@@ -2098,6 +2107,88 @@ TEST_CASE_FIXTURE(Fixture, "shared_old_solver_dependency_replacement_survives")
     // would crash with VisitType.h(439) assertion or segfault.
     auto retStr = Luau::toString(consumerModule->returnType, toStringOpts);
     CHECK(!retStr.empty());
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_autocomplete_shows_indexed_filenames")
+{
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+
+    auto uri1 = newDocument("ModuleA.luau", "return {}");
+    robloxPlatform->addFileToIndex(uri1, workspace.fileResolver.getModuleName(uri1));
+    auto uri2 = newDocument("ModuleB.luau", "return {}");
+    robloxPlatform->addFileToIndex(uri2, workspace.fileResolver.getModuleName(uri2));
+
+    auto [source, marker] = sourceWithMarker(R"(
+        local x = shared("|")
+    )");
+
+    auto uri = newDocument("consumer.luau", source);
+
+    lsp::CompletionParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = marker;
+
+    auto result = workspace.completion(params, nullptr);
+
+    CHECK(getItem(result, "ModuleA").has_value());
+    CHECK(getItem(result, "ModuleB").has_value());
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_autocomplete_ambiguous_shows_relative_paths")
+{
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+
+    auto uri1 = newDocument("src/a/Utils.luau", "return {}");
+    robloxPlatform->addFileToIndex(uri1, workspace.fileResolver.getModuleName(uri1));
+    auto uri2 = newDocument("src/b/Utils.luau", "return {}");
+    robloxPlatform->addFileToIndex(uri2, workspace.fileResolver.getModuleName(uri2));
+
+    auto [source, marker] = sourceWithMarker(R"(
+        local x = shared("|")
+    )");
+
+    auto uri = newDocument("consumer.luau", source);
+
+    lsp::CompletionParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = marker;
+
+    auto result = workspace.completion(params, nullptr);
+
+    // Plain stem should NOT appear since it's ambiguous
+    CHECK_FALSE(getItem(result, "Utils").has_value());
+
+    // Should show disambiguated relative paths instead
+    bool foundPathA = false;
+    bool foundPathB = false;
+    for (const auto& item : result)
+    {
+        if (item.label.find("a/Utils") != std::string::npos)
+            foundPathA = true;
+        if (item.label.find("b/Utils") != std::string::npos)
+            foundPathB = true;
+    }
+    CHECK(foundPathA);
+    CHECK(foundPathB);
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_autocomplete_empty_index")
+{
+    auto [source, marker] = sourceWithMarker(R"(
+        local x = shared("|")
+    )");
+
+    auto uri = newDocument("consumer.luau", source);
+
+    lsp::CompletionParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = marker;
+
+    auto result = workspace.completion(params, nullptr);
+
+    CHECK(result.empty());
 }
 
 TEST_SUITE_END();

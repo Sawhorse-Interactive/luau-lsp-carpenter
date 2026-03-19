@@ -140,6 +140,7 @@ std::optional<lsp::Hover> WorkspaceFolder::hover(const lsp::HoverParams& params,
     std::optional<Luau::TypeId> type = std::nullopt;
     std::optional<std::string> documentationSymbol = getDocumentationSymbolAtPosition(*sourceModule, *module, position);
     std::optional<DocumentationLocation> documentationLocation = std::nullopt;
+    std::optional<DocumentationLocation> documentationLocationFallback = std::nullopt;
 
     if (auto ref = node->as<Luau::AstTypeReference>())
     {
@@ -216,11 +217,38 @@ std::optional<lsp::Hover> WorkspaceFolder::hover(const lsp::HoverParams& params,
             {
                 if (key && key->location.contains(position))
                 {
-                    // Return type type of the value
+                    // Return type of the value
                     if (auto it = module->astTypes.find(value))
                     {
                         type = *it;
                     }
+
+                    // Look up property documentation from the expected table type
+                    if (auto parentTy = module->astExpectedTypes.find(parent))
+                    {
+                        auto followedParentTy = Luau::follow(*parentTy);
+                        if (auto keyStr = key->as<Luau::AstExprConstantString>())
+                        {
+                            std::string keyName(keyStr->value.data, keyStr->value.size);
+                            if (auto propInformation = lookupProp(followedParentTy, keyName); !propInformation.empty())
+                            {
+                                auto [baseTy, prop] = propInformation[0];
+                                if (auto definitionModuleName = Luau::getDefinitionModuleName(baseTy))
+                                {
+                                    if (prop.location)
+                                        documentationLocation = {definitionModuleName.value(), prop.location.value()};
+                                    if (prop.typeLocation)
+                                    {
+                                        if (documentationLocation)
+                                            documentationLocationFallback = {definitionModuleName.value(), prop.typeLocation.value()};
+                                        else
+                                            documentationLocation = {definitionModuleName.value(), prop.typeLocation.value()};
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     break;
                 }
             }
@@ -242,8 +270,13 @@ std::optional<lsp::Hover> WorkspaceFolder::hover(const lsp::HoverParams& params,
                     {
                         if (prop.location)
                             documentationLocation = {definitionModuleName.value(), prop.location.value()};
-                        else if (prop.typeLocation)
-                            documentationLocation = {definitionModuleName.value(), prop.typeLocation.value()};
+                        if (prop.typeLocation)
+                        {
+                            if (documentationLocation)
+                                documentationLocationFallback = {definitionModuleName.value(), prop.typeLocation.value()};
+                            else
+                                documentationLocation = {definitionModuleName.value(), prop.typeLocation.value()};
+                        }
                     }
                 }
             }
@@ -371,7 +404,10 @@ std::optional<lsp::Hover> WorkspaceFolder::hover(const lsp::HoverParams& params,
     }
     else if (documentationLocation)
     {
-        if (auto text = printMoonwaveDocumentation(getComments(documentationLocation->moduleName, documentationLocation->location)); !text.empty())
+        auto text = printMoonwaveDocumentation(getComments(documentationLocation->moduleName, documentationLocation->location));
+        if (text.empty() && documentationLocationFallback)
+            text = printMoonwaveDocumentation(getComments(documentationLocationFallback->moduleName, documentationLocationFallback->location));
+        if (!text.empty())
         {
             typeString += kDocumentationBreaker;
             typeString += text;

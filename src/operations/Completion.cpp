@@ -699,10 +699,9 @@ std::vector<lsp::CompletionItem> WorkspaceFolder::completion(const lsp::Completi
             }
         }
 
-        // If autocompleting in a string and the autocompleting text contains a '/' character, then it won't replace correctly due to word boundaries
-        // Apply a complete text edit instead
-        if (name.find('/') != std::string::npos && result.context == Luau::AutocompleteContext::String &&
-            entry.kind != Luau::AutocompleteEntryKind::RequirePath)
+        // For string completions, apply a text edit covering the content inside the quotes.
+        // This allows VS Code to properly filter completions as the user types inside the string.
+        if (result.context == Luau::AutocompleteContext::String && entry.kind != Luau::AutocompleteEntryKind::RequirePath)
         {
             auto lastAst = result.ancestry.back();
             if (auto str = lastAst->as<Luau::AstExprConstantString>())

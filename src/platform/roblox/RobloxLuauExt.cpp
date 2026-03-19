@@ -936,6 +936,7 @@ void RobloxPlatform::mutateRegisteredDefinitions(Luau::GlobalTypes& globals, std
         Luau::TypeId sharedFnType = arena.addType(Luau::FunctionType{argPack, retPack});
 
         Luau::attachMagicFunction(sharedFnType, std::make_shared<MagicShared>(this));
+        Luau::attachTag(sharedFnType, "SharedModules");
 
         globals.globalScope->bindings[Luau::AstName("shared")] = Luau::Binding{sharedFnType};
     }

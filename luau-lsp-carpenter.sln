@@ -1,0 +1,41 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "extern", "extern", "{8C8C186C-83DC-ECBC-707A-D920EEBF6757}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sentry-native", "sentry-native", "{FEB46F61-7DBA-7AF6-23B6-419C809A756C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D6A6A153-4B1F-9720-6257-C141832F6DB5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fixtures", "fixtures", "{417ABBA8-4A55-5799-3F86-765AA1FA248B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dotnet_signal", "dotnet_signal", "{D1157DBD-D34C-19B0-718C-00258A04254F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "test_dotnet", "extern\sentry-native\tests\fixtures\dotnet_signal\test_dotnet.csproj", "{FA79E36B-D64E-0531-F5BC-ADCAC8CB913A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FA79E36B-D64E-0531-F5BC-ADCAC8CB913A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA79E36B-D64E-0531-F5BC-ADCAC8CB913A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA79E36B-D64E-0531-F5BC-ADCAC8CB913A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA79E36B-D64E-0531-F5BC-ADCAC8CB913A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{FEB46F61-7DBA-7AF6-23B6-419C809A756C} = {8C8C186C-83DC-ECBC-707A-D920EEBF6757}
+		{D6A6A153-4B1F-9720-6257-C141832F6DB5} = {FEB46F61-7DBA-7AF6-23B6-419C809A756C}
+		{417ABBA8-4A55-5799-3F86-765AA1FA248B} = {D6A6A153-4B1F-9720-6257-C141832F6DB5}
+		{D1157DBD-D34C-19B0-718C-00258A04254F} = {417ABBA8-4A55-5799-3F86-765AA1FA248B}
+		{FA79E36B-D64E-0531-F5BC-ADCAC8CB913A} = {D1157DBD-D34C-19B0-718C-00258A04254F}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FDEA6782-9555-463D-A8EA-9100BD060006}
+	EndGlobalSection
+EndGlobal

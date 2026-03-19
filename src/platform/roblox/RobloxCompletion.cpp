@@ -187,6 +187,66 @@ std::optional<Luau::AutocompleteEntryMap> RobloxPlatform::completionCallback(
 
         return result;
     }
+    else if (tag == "SharedModules")
+    {
+        Luau::AutocompleteEntryMap result;
+        for (const auto& [lowerStem, entries] : fileNameIndex)
+        {
+            if (entries.size() == 1)
+            {
+                // Unique stem: extract original-case stem from relativePath
+                const auto& relPath = entries[0].relativePath;
+                auto lastSlash = relPath.rfind('/');
+                std::string stem = (lastSlash != std::string::npos) ? relPath.substr(lastSlash + 1) : relPath;
+                result.insert_or_assign(stem,
+                    Luau::AutocompleteEntry{Luau::AutocompleteEntryKind::String, workspaceFolder->frontend.builtinTypes->stringType, false, false,
+                        Luau::TypeCorrectKind::Correct});
+            }
+            else
+            {
+                // Ambiguous: find shortest trailing path suffix that disambiguates all entries
+                auto getTrailingSegments = [](const std::string& path, size_t n) -> std::string
+                {
+                    size_t pos = path.size();
+                    for (size_t i = 0; i < n; ++i)
+                    {
+                        size_t slash = (pos > 0) ? path.rfind('/', pos - 1) : std::string::npos;
+                        if (slash == std::string::npos)
+                            return path;
+                        pos = slash;
+                    }
+                    return path.substr(pos + 1);
+                };
+
+                // Start with 2 segments (parent/stem), increase until all are unique
+                size_t numSegments = 2;
+                for (; numSegments <= 50; ++numSegments)
+                {
+                    std::unordered_set<std::string> seen;
+                    bool allUnique = true;
+                    for (const auto& entry : entries)
+                    {
+                        if (!seen.insert(getTrailingSegments(entry.relativePath, numSegments)).second)
+                        {
+                            allUnique = false;
+                            break;
+                        }
+                    }
+                    if (allUnique)
+                        break;
+                }
+
+                for (const auto& entry : entries)
+                {
+                    std::string label = getTrailingSegments(entry.relativePath, numSegments);
+                    result.insert_or_assign(label,
+                        Luau::AutocompleteEntry{Luau::AutocompleteEntryKind::String, workspaceFolder->frontend.builtinTypes->stringType, false, false,
+                            Luau::TypeCorrectKind::Correct});
+                }
+            }
+        }
+        return result;
+    }
 
     return std::nullopt;
 }
