@@ -479,7 +479,7 @@ TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_table_literal_key_from_ty
 
     lsp::HoverParams params;
     params.textDocument = lsp::TextDocumentIdentifier{uri};
-    params.position = lsp::Position{11, 13}; // hovering on 'Bar' in table literal
+    params.position = lsp::Position{10, 13}; // hovering on 'Bar' in table literal
 
     auto result = workspace.hover(params, nullptr);
     REQUIRE(result);
@@ -508,7 +508,7 @@ TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_table_literal_key_from_cr
 
     lsp::HoverParams params;
     params.textDocument = lsp::TextDocumentIdentifier{uri};
-    params.position = lsp::Position{6, 13}; // hovering on 'Bar' in table literal
+    params.position = lsp::Position{7, 13}; // hovering on 'Bar' in table literal
 
     auto result = workspace.hover(params, nullptr);
     REQUIRE(result);
