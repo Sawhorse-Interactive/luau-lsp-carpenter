@@ -415,10 +415,10 @@ TEST_CASE_FIXTURE(Fixture, "print_moonwave_documentation")
     auto documentation = printMoonwaveDocumentation(comments);
 
     CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Parameters**\n"
+                            "\n\n**Param(s):**\n"
                             "\n- `x` number -- Input number"
-                            "\n\n**Returns**\n"
-                            "\n- number");
+                            "\n\n**Return(s):**"
+                            "\n\nnumber");
 }
 
 TEST_CASE_FIXTURE(Fixture, "print_throws_info")
@@ -446,12 +446,12 @@ TEST_CASE_FIXTURE(Fixture, "print_throws_info")
     auto documentation = printMoonwaveDocumentation(comments);
 
     CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Parameters**\n"
+                            "\n\n**Param(s):**\n"
                             "\n- `x` number -- Input number"
-                            "\n\n**Returns**\n"
-                            "\n- number"
-                            "\n\n**Throws**\n"
-                            "\n- `NotANumber` -- Input is not a number");
+                            "\n\n**Return(s):**"
+                            "\n\nnumber"
+                            "\n\n**Throws:**"
+                            "\n\n`NotANumber` -- Input is not a number");
 }
 
 TEST_CASE_FIXTURE(Fixture, "ignored_tags")
@@ -479,7 +479,7 @@ TEST_CASE_FIXTURE(Fixture, "ignored_tags")
     auto documentation = printMoonwaveDocumentation(comments);
 
     CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Parameters**\n"
+                            "\n\n**Param(s):**\n"
                             "\n- `x` number -- Testing");
 }
 
@@ -742,10 +742,10 @@ TEST_CASE_FIXTURE(Fixture, "triple_dash_moonwave_output_matches_block_comment")
     auto documentation = printMoonwaveDocumentation(comments);
 
     CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Parameters**\n"
+                            "\n\n**Param(s):**\n"
                             "\n- `x` number -- Input number"
-                            "\n\n**Returns**\n"
-                            "\n- number");
+                            "\n\n**Return(s):**"
+                            "\n\nnumber");
 }
 
 TEST_CASE("extract_moonwave_param_doc_finds_matching_param")
