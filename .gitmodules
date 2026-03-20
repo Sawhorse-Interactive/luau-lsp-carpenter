@@ -1,6 +1,7 @@
 [submodule "luau"]
 	path = luau
-	url = https://github.com/Sawhorse-Interactive/luau-carpenter.git
+	url = https://github.com/luau-lang/luau.git
+	ignore = dirty
 [submodule "extern/sentry-native"]
 	path = extern/sentry-native
 	url = https://github.com/getsentry/sentry-native.git

@@ -8,4 +8,5 @@ if "%CONFIG%"=="" set CONFIG=Release
 set TARGET=%2
 if "%TARGET%"=="" set TARGET=Luau.LanguageServer.CLI
 
+cmake -G Ninja -S . -B build
 cmake --build build --target %TARGET% --config %CONFIG% -j%NUMBER_OF_PROCESSORS%
