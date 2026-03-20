@@ -170,6 +170,15 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
                     if (auto paramDoc = extractMoonwaveParamDoc(moonwaveComments, ftv->argNames[idx]->name))
                         parameterDocumentation.value = *paramDoc;
 
+            if (!parameterDocumentation.value.empty())
+            {
+                std::string paramName = (idx < ftv->argNames.size() && ftv->argNames[idx]) ? ftv->argNames[idx]->name : "";
+                if (!paramName.empty())
+                    parameterDocumentation.value = "`" + paramName + "` -- **" + parameterDocumentation.value + "**\n\n---";
+                else
+                    parameterDocumentation.value = "**" + parameterDocumentation.value + "**\n\n---";
+            }
+
             // Compute the label
             // We attempt to search for the position in the string for this label, and if we don't find it,
             // then we give up and just use the string label
@@ -202,6 +211,9 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
                 if (baseDocumentationSymbol)
                     if (auto docs = printDocumentation(client->documentation, *baseDocumentationSymbol + "/param/" + std::to_string(idx)))
                         parameterDocumentation.value = *docs;
+
+                if (!parameterDocumentation.value.empty())
+                    parameterDocumentation.value = "`...` -- **" + parameterDocumentation.value + "**\n\n---";
 
                 // Compute the label
                 // We attempt to search for the position in the string for this label, and if we don't find it,

@@ -70,6 +70,17 @@
       "path": "editors/code/"
     },
     {
+      "label": "Build Server (build.bat)",
+      "type": "shell",
+      "command": "build.bat",
+      "group": "build",
+      "problemMatcher": "$msCompile",
+      "options": {
+        "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+      },
+      "detail": "Configure, build, and copy luau-lsp.exe to build/"
+    },
+    {
       "label": "Build Server and Extension",
       "dependsOn": ["Build Server", "npm: compile"]
     }
