@@ -34,6 +34,35 @@ if (LSP_BUILD_WITH_SENTRY)
     set(CRASHPAD_ENABLE_STACKTRACE ON)
 endif ()
 
+# Apply patches to the Luau submodule at configure time (before sources are parsed)
+file(GLOB LUAU_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/luau-*.patch")
+foreach(PATCH_FILE ${LUAU_PATCHES})
+    # Check if patch is already applied (reverse-apply succeeds = already applied)
+    execute_process(
+        COMMAND git apply --reverse --check "${PATCH_FILE}"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/luau"
+        RESULT_VARIABLE PATCH_ALREADY_APPLIED
+        OUTPUT_QUIET
+        ERROR_QUIET
+    )
+    if(PATCH_ALREADY_APPLIED)
+        # Not yet applied — apply it now
+        execute_process(
+            COMMAND git apply "${PATCH_FILE}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/luau"
+            RESULT_VARIABLE PATCH_RESULT
+            ERROR_VARIABLE PATCH_ERROR
+        )
+        if(PATCH_RESULT)
+            message(FATAL_ERROR "Failed to apply Luau patch ${PATCH_FILE}:\n${PATCH_ERROR}")
+        else()
+            message(STATUS "Applied Luau patch: ${PATCH_FILE}")
+        endif()
+    else()
+        message(STATUS "Luau patch already applied: ${PATCH_FILE}")
+    endif()
+endforeach()
+
 add_subdirectory(luau)
 add_library(Luau.LanguageServer STATIC)
 add_executable(Luau.LanguageServer.CLI)

@@ -1,0 +1,152 @@
+diff --git a/Analysis/include/Luau/FileResolver.h b/Analysis/include/Luau/FileResolver.h
+index 95dc3218..1f114564 100644
+--- a/Analysis/include/Luau/FileResolver.h
++++ b/Analysis/include/Luau/FileResolver.h
+@@ -12,6 +12,7 @@ namespace Luau
+ {
+ 
+ class AstExpr;
++class AstExprCall;
+ 
+ using ModuleName = std::string;
+ 
+@@ -128,6 +129,11 @@ struct FileResolver
+         return std::nullopt;
+     }
+ 
++    virtual std::optional<ModuleInfo> resolveRequireLikeImport(const ModuleName& currentModule, const AstExprCall& call)
++    {
++        return std::nullopt;
++    }
++
+     std::optional<RequireSuggestions> getRequireSuggestions(const ModuleName& requirer, const std::optional<std::string>& pathString) const;
+ 
+     std::shared_ptr<RequireSuggester> requireSuggester;
+diff --git a/Analysis/include/Luau/Module.h b/Analysis/include/Luau/Module.h
+index 44700b19..b7385d53 100644
+--- a/Analysis/include/Luau/Module.h
++++ b/Analysis/include/Luau/Module.h
+@@ -145,6 +145,11 @@ struct Module
+     TypePackId returnType = nullptr;
+     std::unordered_map<Name, TypeFun> exportedTypeBindings;
+ 
++    // Modules whose types are referenced by this module's type graph.
++    // Prevents dependency modules from being destroyed while this module
++    // still contains TypeIds pointing into their interfaceTypes arenas.
++    std::vector<ModulePtr> retainedModules;
++
+     // Arenas related to the DFG must persist after the DFG no longer exists, as
+     // Module objects maintain raw pointers to objects in these arenas.
+     DefArena defArena;
+diff --git a/Analysis/src/ConstraintGenerator.cpp b/Analysis/src/ConstraintGenerator.cpp
+index 87d5b842..45c7efc4 100644
+--- a/Analysis/src/ConstraintGenerator.cpp
++++ b/Analysis/src/ConstraintGenerator.cpp
+@@ -1249,18 +1249,20 @@ ControlFlow ConstraintGenerator::visit(const ScopePtr& scope, AstStatLocal* stat
+             if (!maybeRequire)
+                 continue;
+ 
+-            AstExpr* require = *maybeRequire;
+-
+-            auto moduleInfo = moduleResolver->resolveModuleInfo(module->name, *require);
++            auto moduleInfo = moduleResolver->resolveModuleInfo(module->name, **maybeRequire);
+             if (!moduleInfo)
+                 continue;
+ 
+-            ModulePtr module = moduleResolver->getModule(moduleInfo->name);
+-            if (!module)
++            ModulePtr depModule = moduleResolver->getModule(moduleInfo->name);
++            if (!depModule)
+                 continue;
+ 
++            // Keep the dependency module alive so that TypeIds from its
++            // interfaceTypes remain valid for the lifetime of this module.
++            module->retainedModules.push_back(depModule);
++
+             const Name name{statLocal->vars.data[i]->name.value};
+-            scope->importedTypeBindings[name] = module->exportedTypeBindings;
++            scope->importedTypeBindings[name] = depModule->exportedTypeBindings;
+             scope->importedModules[name] = moduleInfo->name;
+ 
+             // Imported typeArguments of requires that transitively refer to current module have to be replaced with 'any'
+diff --git a/Analysis/src/ConstraintSolver.cpp b/Analysis/src/ConstraintSolver.cpp
+index 31b424f7..85af23a3 100644
+--- a/Analysis/src/ConstraintSolver.cpp
++++ b/Analysis/src/ConstraintSolver.cpp
+@@ -3917,8 +3917,8 @@ TypeId ConstraintSolver::resolveModule(const ModuleInfo& info, const Location& l
+             return builtinTypes->anyType;
+     }
+ 
+-    ModulePtr module = moduleResolver->getModule(info.name);
+-    if (!module)
++    ModulePtr depModule = moduleResolver->getModule(info.name);
++    if (!depModule)
+     {
+         if (!moduleResolver->moduleExists(info.name) && !info.optional)
+             reportError(UnknownRequire{moduleResolver->getHumanReadableModuleName(info.name)}, location);
+@@ -3926,20 +3926,24 @@ TypeId ConstraintSolver::resolveModule(const ModuleInfo& info, const Location& l
+         return builtinTypes->errorType;
+     }
+ 
+-    if (module->type != SourceCode::Type::Module)
++    if (depModule->type != SourceCode::Type::Module)
+     {
+-        reportError(IllegalRequire{module->humanReadableName, "Module is not a ModuleScript. It cannot be required."}, location);
++        reportError(IllegalRequire{depModule->humanReadableName, "Module is not a ModuleScript. It cannot be required."}, location);
+         return builtinTypes->errorType;
+     }
+ 
+-    TypePackId modulePack = module->returnType;
++    // Keep the dependency module alive so that TypeIds pointing into its
++    // interfaceTypes arena remain valid for the lifetime of the consumer module.
++    module->retainedModules.push_back(depModule);
++
++    TypePackId modulePack = depModule->returnType;
+     if (get<ErrorTypePack>(modulePack))
+         return builtinTypes->errorType;
+ 
+     std::optional<TypeId> moduleType = first(modulePack);
+     if (!moduleType)
+     {
+-        reportError(IllegalRequire{module->humanReadableName, "Module does not return exactly 1 value. It cannot be required."}, location);
++        reportError(IllegalRequire{depModule->humanReadableName, "Module does not return exactly 1 value. It cannot be required."}, location);
+         return builtinTypes->errorType;
+     }
+ 
+diff --git a/Analysis/src/RequireTracer.cpp b/Analysis/src/RequireTracer.cpp
+index 22aba2f4..cfcdf928 100644
+--- a/Analysis/src/RequireTracer.cpp
++++ b/Analysis/src/RequireTracer.cpp
+@@ -30,6 +30,10 @@ struct RequireTracer : AstVisitor
+         if (global && global->name == "require" && expr->args.size >= 1)
+             requireCalls.push_back(expr);
+ 
++        // Also collect require-like imports (e.g. shared()) for dependency tracking
++        if (auto info = fileResolver->resolveRequireLikeImport(currentModuleName, *expr))
++            requireLikeImports.push_back({expr, std::move(*info)});
++
+         return true;
+     }
+ 
+@@ -162,6 +166,13 @@ struct RequireTracer : AstVisitor
+                 result.exprs[require] = {}; // mark require as unresolved
+             }
+         }
++
++        // Add require-like imports (e.g. shared()) to the require list for dependency tracking
++        for (auto& [call, info] : requireLikeImports)
++        {
++            result.requireList.push_back({info.name, call->location});
++            result.exprs[call] = std::move(info);
++        }
+     }
+ 
+     RequireTraceResult& result;
+@@ -171,6 +182,7 @@ struct RequireTracer : AstVisitor
+     DenseHashMap<AstLocal*, AstExpr*> locals;
+     std::vector<AstNode*> work;
+     std::vector<AstExprCall*> requireCalls;
++    std::vector<std::pair<AstExprCall*, ModuleInfo>> requireLikeImports;
+ };
+ 
+ RequireTraceResult traceRequires(FileResolver* fileResolver, AstStatBlock* root, const ModuleName& currentModuleName, const TypeCheckLimits& limits)

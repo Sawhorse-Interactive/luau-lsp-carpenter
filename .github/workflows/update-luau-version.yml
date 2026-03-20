@@ -1,9 +1,9 @@
-name: Update Luau Version (DISABLED - fork uses modified Luau)
+name: Update Luau Version
 
 on:
-  workflow_dispatch: # Manual only - auto-schedule disabled for this fork
-  # schedule:
-  #   - cron: "10 0 * * *" # Disabled: this fork modifies the Luau submodule
+  workflow_dispatch:
+  schedule:
+    - cron: "10 0 * * *"
 
 jobs:
   sync:
@@ -28,6 +28,16 @@ jobs:
         run: |
           version=$(scripts/update_luau_and_changelog.py | tr '\n' ' ')
           echo "LUAU_VERSION=$version" >> $GITHUB_OUTPUT
+
+      - name: Verify patches apply
+        run: |
+          for patch in patches/luau-*.patch; do
+            [ -f "$patch" ] || continue
+            git apply --check "$patch" --directory=luau || {
+              echo "::error::Patch $patch does not apply cleanly to Luau ${{ steps.update_luau_version.outputs.LUAU_VERSION }}"
+              exit 1
+            }
+          done
 
       - name: Create Pull Request
         id: create_pull_request
