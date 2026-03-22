@@ -8222,13 +8222,13 @@ type GetAdAvailabilityNowForUniverseResult = {
 }
 
 
-type ProductIdentifierArray = any
-type ReflectedClassOrNil = any
 type ReflectedClasses = any
+type VideoSampleArray = any
 type InfoTypeArray = any
 type RankedItemArray = any
-type VideoSampleArray = any
+type ProductIdentifierArray = any
 type ReflectedProperties = any
+type ReflectedClassOrNil = any
 
 declare class Object
 	@[deprecated {use = "Object:IsA"}]
