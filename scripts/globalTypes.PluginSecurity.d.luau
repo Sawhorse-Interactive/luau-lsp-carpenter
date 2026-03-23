@@ -8222,11 +8222,11 @@ type GetAdAvailabilityNowForUniverseResult = {
 }
 
 
-type ReflectedClasses = any
-type VideoSampleArray = any
 type InfoTypeArray = any
 type RankedItemArray = any
+type ReflectedClasses = any
 type ProductIdentifierArray = any
+type VideoSampleArray = any
 type ReflectedProperties = any
 type ReflectedClassOrNil = any
 
