@@ -157,8 +157,8 @@ TEST_CASE_FIXTURE(Fixture, "signature_help_shows_moonwave_param_documentation")
     REQUIRE(result->signatures[0].parameters);
     REQUIRE_EQ(result->signatures[0].parameters->size(), 2);
 
-    CHECK_EQ(result->signatures[0].parameters->at(0).documentation->value, "number -- The input number");
-    CHECK_EQ(result->signatures[0].parameters->at(1).documentation->value, "string -- The name");
+    CHECK_EQ(result->signatures[0].parameters->at(0).documentation->value, "`x` -- **number -- The input number**\n\n---");
+    CHECK_EQ(result->signatures[0].parameters->at(1).documentation->value, "`y` -- **string -- The name**\n\n---");
 }
 
 TEST_CASE_FIXTURE(Fixture, "signature_help_shows_moonwave_param_documentation_from_block_comment")
@@ -187,8 +187,8 @@ TEST_CASE_FIXTURE(Fixture, "signature_help_shows_moonwave_param_documentation_fr
     REQUIRE(result->signatures[0].parameters);
     REQUIRE_EQ(result->signatures[0].parameters->size(), 2);
 
-    CHECK_EQ(result->signatures[0].parameters->at(0).documentation->value, "number -- The input number");
-    CHECK_EQ(result->signatures[0].parameters->at(1).documentation->value, "string -- The name");
+    CHECK_EQ(result->signatures[0].parameters->at(0).documentation->value, "`x` -- **number -- The input number**\n\n---");
+    CHECK_EQ(result->signatures[0].parameters->at(1).documentation->value, "`y` -- **string -- The name**\n\n---");
 }
 
 TEST_SUITE_END();

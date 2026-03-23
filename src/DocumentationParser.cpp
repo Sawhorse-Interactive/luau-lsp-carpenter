@@ -174,7 +174,7 @@ std::string printMoonwaveDocumentation(const std::vector<std::string>& comments)
 
     if (!params.empty())
     {
-        result += "\n\n**Parameters**\n";
+        result += "\n\n**Param(s):**\n";
         for (auto& param : params)
         {
             auto paramText = param.substr(7);
@@ -196,7 +196,7 @@ std::string printMoonwaveDocumentation(const std::vector<std::string>& comments)
 
     if (!returns.empty())
     {
-        result += "\n\n**Returns**\n";
+        result += "\n\n**Return(s):**";
         for (auto& ret : returns)
         {
             auto returnText = ret.substr(8);
@@ -210,15 +210,15 @@ std::string printMoonwaveDocumentation(const std::vector<std::string>& comments)
             }
 
             if (!retType.empty() && retType != returnText)
-                result += "\n- `" + retType + "`" + returnText;
+                result += "\n\n`" + retType + "`" + returnText;
             else
-                result += "\n- " + returnText;
+                result += "\n\n" + returnText;
         }
     }
 
     if (!throws.empty())
     {
-        result += "\n\n**Throws**\n";
+        result += "\n\n**Throws:**";
         for (auto& thr : throws)
         {
             auto throwText = thr.substr(7);
@@ -232,9 +232,9 @@ std::string printMoonwaveDocumentation(const std::vector<std::string>& comments)
             }
 
             if (!throwType.empty() && throwType != throwText)
-                result += "\n- `" + throwType + "`" + throwText;
+                result += "\n\n`" + throwType + "`" + throwText;
             else
-                result += "\n- " + throwText;
+                result += "\n\n" + throwText;
         }
     }
 

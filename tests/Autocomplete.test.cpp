@@ -215,6 +215,48 @@ TEST_CASE_FIXTURE(Fixture, "external_module_intersected_type_table_property_has_
     CHECK_EQ(item2.documentation->value, "Example sick string");
 }
 
+TEST_CASE_FIXTURE(Fixture, "external_module_type_table_literal_property_has_documentation")
+{
+    std::string typeSource = R"(
+        export type Person = {
+            --- The registered person's name.
+            Name: string,
+        }
+
+        local Registrar = {}
+
+        function Registrar:RegisterPerson(info: Person)
+            print(info)
+        end
+
+        return Registrar
+    )";
+
+    auto [source, marker] = sourceWithMarker(R"(
+        local Registrar = require("registrar.luau")
+        Registrar:RegisterPerson({
+            N|
+        })
+    )");
+
+    auto typesUri = newDocument("registrar.luau", typeSource);
+    workspace.checkStrict(workspace.fileResolver.getModuleName(typesUri), nullptr);
+
+    auto uri = newDocument("foo.luau", source);
+
+    lsp::CompletionParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = marker;
+
+    auto result = workspace.completion(params, nullptr);
+
+    auto item = getItem(result, "Name");
+    REQUIRE(item);
+    REQUIRE(item->documentation);
+    CHECK_EQ(item->documentation->kind, lsp::MarkupKind::Markdown);
+    trim(item->documentation->value);
+    CHECK_EQ(item->documentation->value, "The registered person's name.");
+}
 
 TEST_CASE_FIXTURE(Fixture, "intersected_type_table_property_has_documentation")
 {

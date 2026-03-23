@@ -492,9 +492,11 @@ std::optional<std::string> WorkspaceFolder::getDocumentationForAutocompleteEntry
                     else if (node->is<Luau::AstExprGlobal>())
                     {
                         // potentially autocompleting a property inside of a table literal
+                        // Use astExpectedTypes (not astTypes) so we get the declared type from the
+                        // original module, which is needed to resolve doc comments for exported types
                         if (ancestry.size() > 2)
                             if (auto table = ancestry[ancestry.size() - 2]->as<Luau::AstExprTable>())
-                                parentTy = localModule->astTypes.find(table);
+                                parentTy = localModule->astExpectedTypes.find(table);
                     }
                 }
 
