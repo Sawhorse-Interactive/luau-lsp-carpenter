@@ -2,11 +2,9 @@
 #include "Fixture.h"
 
 #include "LSP/IostreamHelpers.hpp"
+#include "Platform/RobloxPlatform.hpp"
 
 TEST_SUITE_BEGIN("References");
-
-// TODO: cross module tests
-// TODO: type references tests (cross module)
 
 static void sortResults(std::optional<std::vector<lsp::Location>>& result)
 {
@@ -697,6 +695,111 @@ TEST_CASE_FIXTURE(Fixture, "find_references_through_nested_metatable_chain")
 
     CHECK_EQ(lsp::Range{{4, 21}, {4, 25}}, result->at(0).range); // function Foo.Test()
     CHECK_EQ(lsp::Range{{10, 12}, {10, 16}}, result->at(1).range); // Baz:Test()
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_cross_module_table_references")
+{
+    auto providerUri = newDocument("Provider.luau", R"(
+        --!strict
+        local T = {}
+        T.value = 42
+        return T
+    )");
+    auto providerMod = workspace.fileResolver.getModuleName(providerUri);
+
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    robloxPlatform->addFileToIndex(providerUri, providerMod);
+
+    auto consumerUri = newDocument("Consumer.luau", R"(
+        --!strict
+        local mod = shared("Provider")
+        local x = mod.value
+    )");
+    auto consumerMod = workspace.fileResolver.getModuleName(consumerUri);
+    robloxPlatform->addFileToIndex(consumerUri, consumerMod);
+
+    workspace.frontend.check(consumerMod);
+
+    auto providerTy = requireType(getModule(providerMod), "T");
+    auto references = workspace.findAllTableReferences(providerTy, nullptr);
+
+    // Should find usages in Consumer.luau
+    bool foundConsumer = false;
+    for (const auto& ref : references)
+        if (ref.moduleName == consumerMod)
+            foundConsumer = true;
+    CHECK(foundConsumer);
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_cross_module_table_property_references")
+{
+    auto providerUri = newDocument("ProviderProp.luau", R"(
+        --!strict
+        local T = {}
+        T.name = "hello"
+        return T
+    )");
+    auto providerMod = workspace.fileResolver.getModuleName(providerUri);
+
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    robloxPlatform->addFileToIndex(providerUri, providerMod);
+
+    auto consumerUri = newDocument("ConsumerProp.luau", R"(
+        --!strict
+        local mod = shared("ProviderProp")
+        local x = mod.name
+    )");
+    auto consumerMod = workspace.fileResolver.getModuleName(consumerUri);
+    robloxPlatform->addFileToIndex(consumerUri, consumerMod);
+
+    workspace.frontend.check(consumerMod);
+
+    auto providerTy = requireType(getModule(providerMod), "T");
+    auto references = workspace.findAllTableReferences(providerTy, nullptr, "name");
+
+    // Should find the property usage in Consumer.luau
+    bool foundConsumer = false;
+    for (const auto& ref : references)
+        if (ref.moduleName == consumerMod)
+            foundConsumer = true;
+    CHECK(foundConsumer);
+}
+
+TEST_CASE_FIXTURE(Fixture, "shared_cross_module_function_references")
+{
+    auto providerUri = newDocument("ProviderFn.luau", R"(
+        --!strict
+        local function doThing(x: string)
+        end
+        return doThing
+    )");
+    auto providerMod = workspace.fileResolver.getModuleName(providerUri);
+
+    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(workspace.platform.get());
+    REQUIRE(robloxPlatform);
+    robloxPlatform->addFileToIndex(providerUri, providerMod);
+
+    auto consumerUri = newDocument("ConsumerFn.luau", R"(
+        --!strict
+        local fn = shared("ProviderFn")
+        fn("hello")
+    )");
+    auto consumerMod = workspace.fileResolver.getModuleName(consumerUri);
+    robloxPlatform->addFileToIndex(consumerUri, consumerMod);
+
+    workspace.frontend.check(consumerMod);
+
+    auto providerTy = requireType(getModule(providerMod), "doThing");
+    auto references = workspace.findAllFunctionReferences(providerTy, nullptr);
+
+    // Should find the function call in Consumer.luau
+    bool foundConsumer = false;
+    for (const auto& ref : references)
+        if (ref.moduleName == consumerMod)
+            foundConsumer = true;
+    CHECK(foundConsumer);
 }
 
 TEST_SUITE_END();

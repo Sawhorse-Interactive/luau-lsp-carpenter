@@ -418,6 +418,10 @@ void WorkspaceFolder::indexFiles(const ClientConfiguration& config)
 
     client->sendWorkDoneProgressReport(kIndexProgressToken, std::to_string(moduleNames.size()) + " files");
 
+    // Build filename index BEFORE parsing so shared() resolution works during RequireTracer
+    if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
+        robloxPlatform->buildFileNameIndex();
+
     frontend.clearStats();
     frontend.parseModules(moduleNames);
 
@@ -427,10 +431,6 @@ void WorkspaceFolder::indexFiles(const ClientConfiguration& config)
 
     client->sendWorkDoneProgressEnd(kIndexProgressToken, "Indexed " + std::to_string(moduleNames.size()) + " files");
     client->sendTrace("workspace: indexing all files COMPLETED");
-
-    // Build filename index for shared() resolution
-    if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
-        robloxPlatform->buildFileNameIndex();
 }
 
 static void clearDisabledGlobals(const Client* client, const Luau::GlobalTypes& globalTypes, const std::vector<std::string>& disabledGlobals)
