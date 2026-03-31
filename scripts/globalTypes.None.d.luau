@@ -8273,12 +8273,12 @@ type GetAdAvailabilityNowForUniverseResult = {
 }
 
 
-type ReflectedClassOrNil = any
-type VideoSampleArray = any
-type InfoTypeArray = any
-type ReflectedProperties = any
 type ReflectedClasses = any
+type VideoSampleArray = any
 type ProductIdentifierArray = any
+type InfoTypeArray = any
+type ReflectedClassOrNil = any
+type ReflectedProperties = any
 type RankedItemArray = any
 
 declare class Object
