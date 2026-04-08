@@ -28,7 +28,10 @@ function makeTypeErrorDiagnostic(): vscode.Diagnostic {
     vscode.DiagnosticSeverity.Error,
   );
   diag.source = "Luau";
-  diag.code = { value: "TypeError", target: vscode.Uri.parse("https://luau.org/types") };
+  diag.code = {
+    value: "TypeError",
+    target: vscode.Uri.parse("https://luau.org/types"),
+  };
   return diag;
 }
 
@@ -39,7 +42,10 @@ function makeParseErrorDiagnostic(): vscode.Diagnostic {
     vscode.DiagnosticSeverity.Error,
   );
   diag.source = "Luau";
-  diag.code = { value: "SyntaxError", target: vscode.Uri.parse("https://luau.org/syntax") };
+  diag.code = {
+    value: "SyntaxError",
+    target: vscode.Uri.parse("https://luau.org/syntax"),
+  };
   return diag;
 }
 
@@ -91,35 +97,53 @@ suite("Diagnostic Severity Middleware Test Suite", () => {
         vscode.DiagnosticSeverity.Error,
       );
       diag.source = "Luau";
-      diag.code = { value: "SomeStringCode", target: vscode.Uri.parse("https://luau.org") };
+      diag.code = {
+        value: "SomeStringCode",
+        target: vscode.Uri.parse("https://luau.org"),
+      };
       assert.strictEqual(extractLintName(diag), undefined);
     });
   });
 
   suite("applyOverrides", () => {
     test("remaps Warning to Information", () => {
-      const diag = makeLintDiagnostic("LocalUnused", { value: 7, target: vscode.Uri.parse("https://luau.org/lint#localunused-7") });
+      const diag = makeLintDiagnostic("LocalUnused", {
+        value: 7,
+        target: vscode.Uri.parse("https://luau.org/lint#localunused-7"),
+      });
       const result = applyOverrides([diag], { LocalUnused: "Information" });
       assert.strictEqual(result.length, 1);
-      assert.strictEqual(result[0].severity, vscode.DiagnosticSeverity.Information);
+      assert.strictEqual(
+        result[0].severity,
+        vscode.DiagnosticSeverity.Information,
+      );
     });
 
     test("remaps Warning to Hint", () => {
-      const diag = makeLintDiagnostic("DeprecatedGlobal", { value: 2, target: vscode.Uri.parse("https://luau.org/lint#deprecatedglobal-2") });
+      const diag = makeLintDiagnostic("DeprecatedGlobal", {
+        value: 2,
+        target: vscode.Uri.parse("https://luau.org/lint#deprecatedglobal-2"),
+      });
       const result = applyOverrides([diag], { DeprecatedGlobal: "Hint" });
       assert.strictEqual(result.length, 1);
       assert.strictEqual(result[0].severity, vscode.DiagnosticSeverity.Hint);
     });
 
     test("remaps Warning to Error", () => {
-      const diag = makeLintDiagnostic("UnknownGlobal", { value: 1, target: vscode.Uri.parse("https://luau.org/lint#unknownglobal-1") });
+      const diag = makeLintDiagnostic("UnknownGlobal", {
+        value: 1,
+        target: vscode.Uri.parse("https://luau.org/lint#unknownglobal-1"),
+      });
       const result = applyOverrides([diag], { UnknownGlobal: "Error" });
       assert.strictEqual(result.length, 1);
       assert.strictEqual(result[0].severity, vscode.DiagnosticSeverity.Error);
     });
 
     test("filters out diagnostics with Off override", () => {
-      const diag = makeLintDiagnostic("ImportUnused", { value: 9, target: vscode.Uri.parse("https://luau.org/lint#importunused-9") });
+      const diag = makeLintDiagnostic("ImportUnused", {
+        value: 9,
+        target: vscode.Uri.parse("https://luau.org/lint#importunused-9"),
+      });
       const result = applyOverrides([diag], { ImportUnused: "Off" });
       assert.strictEqual(result.length, 0);
     });
@@ -128,10 +152,9 @@ suite("Diagnostic Severity Middleware Test Suite", () => {
       const typeError = makeTypeErrorDiagnostic();
       const parseError = makeParseErrorDiagnostic();
       const nonLuau = makeNonLuauDiagnostic();
-      const result = applyOverrides(
-        [typeError, parseError, nonLuau],
-        { LocalUnused: "Information" },
-      );
+      const result = applyOverrides([typeError, parseError, nonLuau], {
+        LocalUnused: "Information",
+      });
       assert.strictEqual(result.length, 3);
       assert.strictEqual(result[0].severity, vscode.DiagnosticSeverity.Error);
       assert.strictEqual(result[1].severity, vscode.DiagnosticSeverity.Error);
@@ -156,12 +179,15 @@ suite("Diagnostic Severity Middleware Test Suite", () => {
       const local = makeLintDiagnostic("LocalUnused", 7);
       const imported = makeLintDiagnostic("ImportUnused", 9);
       const typeErr = makeTypeErrorDiagnostic();
-      const result = applyOverrides(
-        [local, imported, typeErr],
-        { LocalUnused: "Information", ImportUnused: "Off" },
-      );
+      const result = applyOverrides([local, imported, typeErr], {
+        LocalUnused: "Information",
+        ImportUnused: "Off",
+      });
       assert.strictEqual(result.length, 2);
-      assert.strictEqual(result[0].severity, vscode.DiagnosticSeverity.Information);
+      assert.strictEqual(
+        result[0].severity,
+        vscode.DiagnosticSeverity.Information,
+      );
       assert.strictEqual(result[1].severity, vscode.DiagnosticSeverity.Error);
     });
 
