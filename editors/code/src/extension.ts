@@ -22,6 +22,10 @@ import {
 } from "./bytecode";
 
 import { onTypeFormattingMiddleware } from "./onTypeFormattingMiddleware";
+import {
+  provideDiagnosticsMiddleware,
+  provideWorkspaceDiagnosticsMiddleware,
+} from "./diagnosticSeverityMiddleware";
 
 import { registerRequireGraph } from "./requireGraph";
 
@@ -522,6 +526,8 @@ const startLanguageServer = async (context: vscode.ExtensionContext) => {
     errorHandler: new ClientErrorHandler(context, 4),
     middleware: {
       provideOnTypeFormattingEdits: onTypeFormattingMiddleware,
+      provideDiagnostics: provideDiagnosticsMiddleware,
+      provideWorkspaceDiagnostics: provideWorkspaceDiagnosticsMiddleware,
     },
   };
 
