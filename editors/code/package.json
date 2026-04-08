@@ -14,7 +14,7 @@
   "bugs": {
     "url": "https://github.com/Sawhorse-Interactive/luau-lsp-carpenter/issues"
   },
-  "version": "0.0.10",
+  "version": "0.1.17",
   "engines": {
     "vscode": "^1.67.0"
   },
@@ -354,7 +354,13 @@
           "default": {},
           "additionalProperties": {
             "type": "string",
-            "enum": ["Error", "Warning", "Information", "Hint", "Off"]
+            "enum": [
+              "Error",
+              "Warning",
+              "Information",
+              "Hint",
+              "Off"
+            ]
           },
           "scope": "resource"
         },
