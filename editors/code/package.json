@@ -348,6 +348,16 @@
           "default": true,
           "scope": "resource"
         },
+        "luau-lsp.diagnostics.severityOverrides": {
+          "markdownDescription": "Override the diagnostic severity of specific Luau lint rules. Keys are lint rule names (e.g., `LocalUnused`), values are severity levels (`Error`, `Warning`, `Information`, `Hint`, `Off`). Use `Off` to suppress a lint entirely. Changes take effect on the next diagnostic update (e.g., when the file is edited or saved).",
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["Error", "Warning", "Information", "Hint", "Off"]
+          },
+          "scope": "resource"
+        },
         "luau-lsp.types.definitionFiles": {
           "markdownDescription": "A mapping of package names to paths of definition files to load in to the type checker. Note that definition file syntax is currently unstable and may change at any time",
           "type": "object",
