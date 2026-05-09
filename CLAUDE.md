@@ -2,14 +2,6 @@
 
 Luau Language Server (luau-lsp) is an implementation of the Language Server Protocol (LSP) for the Luau programming language. It provides IDE features like diagnostics, autocompletion, hover, go-to-definition, etc. The project also includes a standalone CLI (`luau-lsp analyze`) for CI type-checking and linting.
 
-## Memories
-
-Always read these memory files at the start of a conversation. After reading each one, output `[MEMORY_NAME]` (e.g. `[MEMORY.md]`, `[building.md]`) to confirm it was loaded.
-
-- [.claude/memory/MEMORY.md](.claude/memory/MEMORY.md) - Index of user preferences and key patterns
-- [.claude/memory/building.md](.claude/memory/building.md) - How to build and test
-- [.claude/memory/shared-feature.md](.claude/memory/shared-feature.md) - The `shared("FileName")` module resolution feature
-
 ## Architecture
 
 ### Core Components

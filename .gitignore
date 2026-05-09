@@ -1,4 +1,6 @@
 /build
+/build-clangd
+/compile_commands.json
 .vscode/settings.json
 /.vs
 out/
@@ -14,7 +16,9 @@ cmake-build-relwithdebinfo-visual-studio/
 CMakeFiles
 sourcemap.json
 trace.json
+.mcp.json
 .claude
+.serena
 /node_modules
 
 # Prerequisites

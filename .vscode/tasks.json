@@ -21,27 +21,13 @@
     {
       "label": "Build Server",
       "type": "shell",
-      "command": "${command:cmake.tasksBuildCommand}",
+      "command": "build.bat",
       "group": "build",
-      "problemMatcher": [
-        {
-          "fileLocation": "absolute",
-          "pattern": [
-            {
-              "regexp": "\"(.*)\", line (\\d+): (info|warning|(?:|fatal |catastrophic )error) \\((.*)\\): (.*)$",
-              "file": 1,
-              "line": 2,
-              "severity": 3,
-              "code": 4,
-              "message": 5
-            }
-          ]
-        }
-      ],
+      "problemMatcher": "$msCompile",
       "options": {
         "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
       },
-      "detail": "Build Language Server Binary"
+      "detail": "Configure, build, and copy luau-lsp.exe to build/"
     },
     {
       "type": "npm",
@@ -70,19 +56,33 @@
       "path": "editors/code/"
     },
     {
-      "label": "Build Server (build.bat)",
+      "label": "Build Server and Extension",
+      "dependsOn": ["Build Server", "npm: compile"]
+    },
+    {
+      "label": "Build & Test",
       "type": "shell",
-      "command": "build.bat",
-      "group": "build",
+      "command": "build.bat Release Luau.LanguageServer.Test && build\\Release\\Luau.LanguageServer.Test.exe",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
       "problemMatcher": "$msCompile",
       "options": {
         "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
       },
-      "detail": "Configure, build, and copy luau-lsp.exe to build/"
+      "detail": "Build test target then run Luau.LanguageServer.Test.exe"
     },
     {
-      "label": "Build Server and Extension",
-      "dependsOn": ["Build Server", "npm: compile"]
+      "label": "Refresh compile_commands (Ninja)",
+      "type": "shell",
+      "command": "cmake -S . -B build-clangd -G Ninja -DCMAKE_MAKE_PROGRAM=\"C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\Ninja\\ninja.exe\" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug && copy /Y build-clangd\\compile_commands.json compile_commands.json",
+      "group": "build",
+      "problemMatcher": [],
+      "options": {
+        "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+      },
+      "detail": "Configure Ninja build dir + mirror compile_commands.json to repo root for clangd/Serena"
     }
   ]
 }
