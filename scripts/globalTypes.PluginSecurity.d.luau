@@ -8432,6 +8432,13 @@ type VirtualInputPointerAction = {
 }
 
 
+type ReflectedClassOrNil = any
+type RankedItemArray = any
+type VideoSampleArray = any
+type ProductIdentifierArray = any
+type ReflectedClasses = any
+type InfoTypeArray = any
+type ReflectedProperties = any
 
 declare class Object
 	@[deprecated {use = "Object:IsA"}]
