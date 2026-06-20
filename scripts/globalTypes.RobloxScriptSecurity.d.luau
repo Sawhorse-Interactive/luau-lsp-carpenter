@@ -8696,12 +8696,12 @@ type VirtualInputPointerAction = {
 }
 
 
-type VideoSampleArray = any
-type InfoTypeArray = any
 type ReflectedClassOrNil = any
+type VideoSampleArray = any
 type ReflectedProperties = any
-type ReflectedClasses = any
+type InfoTypeArray = any
 type RankedItemArray = any
+type ReflectedClasses = any
 type ProductIdentifierArray = any
 
 declare class Object
