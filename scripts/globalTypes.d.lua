@@ -8697,12 +8697,12 @@ type VirtualInputPointerAction = {
 
 
 type ReflectedClassOrNil = any
+type VideoSampleArray = any
 type ReflectedClasses = any
+type RankedItemArray = any
 type InfoTypeArray = any
 type ProductIdentifierArray = any
 type ReflectedProperties = any
-type RankedItemArray = any
-type VideoSampleArray = any
 
 declare class Object
 	@deprecated
