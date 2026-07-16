@@ -8774,13 +8774,13 @@ type VirtualInputPointerAction = {
 type BatchDataStoreGetOptions = { }
 
 
-type VideoSampleArray = any
 type InfoTypeArray = any
-type ProductIdentifierArray = any
-type ReflectedClasses = any
-type ReflectedProperties = any
-type ReflectedClassOrNil = any
 type RankedItemArray = any
+type ProductIdentifierArray = any
+type ReflectedClassOrNil = any
+type ReflectedProperties = any
+type VideoSampleArray = any
+type ReflectedClasses = any
 
 declare class Object
 	@[deprecated {use = "Object:IsA"}]
