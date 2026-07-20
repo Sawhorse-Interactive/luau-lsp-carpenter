@@ -8775,12 +8775,12 @@ type BatchDataStoreGetOptions = { }
 
 
 type VideoSampleArray = any
-type ReflectedClassOrNil = any
+type RankedItemArray = any
 type ReflectedClasses = any
 type InfoTypeArray = any
-type RankedItemArray = any
-type ProductIdentifierArray = any
 type ReflectedProperties = any
+type ProductIdentifierArray = any
+type ReflectedClassOrNil = any
 
 declare class Object
 	@[deprecated {use = "Object:IsA"}]
