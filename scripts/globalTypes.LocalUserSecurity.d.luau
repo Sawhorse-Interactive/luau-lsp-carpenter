@@ -8774,12 +8774,12 @@ type VirtualInputPointerAction = {
 type BatchDataStoreGetOptions = { }
 
 
-type ReflectedProperties = any
-type ReflectedClassOrNil = any
 type RankedItemArray = any
+type VideoSampleArray = any
+type ReflectedClassOrNil = any
+type ReflectedProperties = any
 type ReflectedClasses = any
 type InfoTypeArray = any
-type VideoSampleArray = any
 type ProductIdentifierArray = any
 
 declare class Object
