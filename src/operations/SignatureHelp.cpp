@@ -3,7 +3,7 @@
 #include "Luau/AstQuery.h"
 #include "Luau/Normalize.h"
 #include "Luau/Unifier.h"
-#include "Luau/OverloadResolution.h"
+#include "Luau/OverloadResolver.h"
 #include "LSP/LuauExt.hpp"
 #include "LSP/DocumentationParser.hpp"
 
@@ -97,7 +97,6 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
             break;
         activeParameter++;
     }
-
     auto it = module->astTypes.find(candidate->func);
     if (!it)
         return std::nullopt;
@@ -148,10 +147,14 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
         size_t idx = 0;
         size_t previousParamPos = label.find('('); // start search at start of parameter list, not earlier
 
-        // Cache moonwave comments for parameter documentation lookup
-        std::vector<std::string> moonwaveComments;
-        if (ftv->definition && ftv->definition->definitionModuleName)
-            moonwaveComments = getComments(ftv->definition->definitionModuleName.value(), ftv->definition->definitionLocation);
+        // Use the same ToStringOptions as toStringNamedFunction so that type names (including
+        // module-qualified ones like "second.foo") are resolved identically in both the full label
+        // and each parameter search string.
+        Luau::ToStringOptions typeStringOpts;
+        typeStringOpts.functionTypeArguments = true;
+        typeStringOpts.hideNamedFunctionTypeParameters = false;
+        typeStringOpts.hideTableKind = opts.hideTableKind;
+        typeStringOpts.scope = scope;
 
         for (; it != Luau::end(ftv->argTypes); it++, idx++)
         {
@@ -160,24 +163,11 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
                 continue;
 
             // Show parameter documentation
+            // TODO: parse moonwave docs for param documentation?
             lsp::MarkupContent parameterDocumentation{lsp::MarkupKind::Markdown, ""};
             if (baseDocumentationSymbol)
                 if (auto docs = printDocumentation(client->documentation, *baseDocumentationSymbol + "/param/" + std::to_string(idx)))
                     parameterDocumentation.value = *docs;
-
-            if (parameterDocumentation.value.empty() && !moonwaveComments.empty())
-                if (idx < ftv->argNames.size() && ftv->argNames[idx])
-                    if (auto paramDoc = extractMoonwaveParamDoc(moonwaveComments, ftv->argNames[idx]->name))
-                        parameterDocumentation.value = *paramDoc;
-
-            if (!parameterDocumentation.value.empty())
-            {
-                std::string paramName = (idx < ftv->argNames.size() && ftv->argNames[idx]) ? ftv->argNames[idx]->name : "";
-                if (!paramName.empty())
-                    parameterDocumentation.value = "`" + paramName + "` -- **" + parameterDocumentation.value + "**\n\n---";
-                else
-                    parameterDocumentation.value = "**" + parameterDocumentation.value + "**\n\n---";
-            }
 
             // Compute the label
             // We attempt to search for the position in the string for this label, and if we don't find it,
@@ -186,7 +176,7 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
             std::string labelString;
             if (idx < ftv->argNames.size() && ftv->argNames[idx] && ftv->argNames[idx]->name != "_")
                 labelString = ftv->argNames[idx]->name + ": ";
-            labelString += Luau::toString(*it);
+            labelString += Luau::toString(*it, typeStringOpts);
 
             auto position = label.find(labelString, previousParamPos);
             if (position != std::string::npos)
@@ -207,13 +197,11 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
             if (auto vtp = Luau::get<Luau::VariadicTypePack>(*tp); !vtp || !vtp->hidden)
             {
                 // Show parameter documentation
+                // TODO: parse moonwave docs for param documentation?
                 lsp::MarkupContent parameterDocumentation{lsp::MarkupKind::Markdown, ""};
                 if (baseDocumentationSymbol)
                     if (auto docs = printDocumentation(client->documentation, *baseDocumentationSymbol + "/param/" + std::to_string(idx)))
                         parameterDocumentation.value = *docs;
-
-                if (!parameterDocumentation.value.empty())
-                    parameterDocumentation.value = "`...` -- **" + parameterDocumentation.value + "**\n\n---";
 
                 // Compute the label
                 // We attempt to search for the position in the string for this label, and if we don't find it,
@@ -222,9 +210,9 @@ std::optional<lsp::SignatureHelp> WorkspaceFolder::signatureHelp(
                 std::string labelString = "...: ";
 
                 if (vtp)
-                    labelString += Luau::toString(vtp->ty);
+                    labelString += Luau::toString(vtp->ty, typeStringOpts);
                 else
-                    labelString += Luau::toString(*tp);
+                    labelString += Luau::toString(*tp, typeStringOpts);
 
                 auto position = label.find(labelString, previousParamPos);
                 if (position != std::string::npos)

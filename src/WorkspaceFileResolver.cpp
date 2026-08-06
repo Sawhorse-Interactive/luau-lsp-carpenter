@@ -4,11 +4,13 @@
 #include "Luau/Ast.h"
 #include "Luau/LuauConfig.h"
 #include "LSP/WorkspaceFileResolver.hpp"
-#include "LSP/LuauExt.hpp"
-#include "Platform/RobloxPlatform.hpp"
 
 #include "Luau/TimeTrace.h"
 #include "LuauFileUtils.hpp"
+
+#include "Plugin/PluginManager.hpp"
+#include "Plugin/PluginTextDocument.hpp"
+#include "Plugin/SourceMapping.hpp"
 
 #include "lua.h"
 
@@ -43,13 +45,84 @@ Uri WorkspaceFileResolver::getUri(const Luau::ModuleName& moduleName) const
     return Uri::file(moduleName);
 }
 
-const TextDocument* WorkspaceFileResolver::getTextDocument(const lsp::DocumentUri& uri) const
+const TextDocument* WorkspaceFileResolver::getManagedTextDocument(const lsp::DocumentUri& uri) const
 {
     auto it = managedFiles.find(uri);
     if (it != managedFiles.end())
         return &it->second;
 
     return nullptr;
+}
+
+const TextDocument* WorkspaceFileResolver::getTextDocument(const lsp::DocumentUri& uri) const
+{
+    // Get the original managed document
+    auto* original = getManagedTextDocument(uri);
+    if (!original)
+        return nullptr;
+
+    // If no plugins active, return original
+    if (!pluginManager || !pluginManager->hasPlugins())
+        return original;
+
+    // Check cache for existing plugin document
+    auto it = pluginDocuments.find(uri);
+    if (it != pluginDocuments.end() && it->second && it->second->version() == original->version())
+        return it->second.get();
+
+    // Apply plugins to transform the document
+    auto moduleName = getModuleName(uri);
+    auto transformed = applyPluginTransformation(original->getText(), uri, moduleName);
+
+    if (!transformed)
+        return original;
+
+    auto pluginDoc = std::make_unique<Luau::LanguageServer::Plugin::PluginTextDocument>(
+        original->uri(),
+        original->languageId(),
+        original->version(),
+        original->getText(),
+        std::move(transformed->transformedSource),
+        Luau::LanguageServer::Plugin::SourceMapping{std::move(transformed->edits)});
+
+    pluginDocuments[uri] = std::move(pluginDoc);
+    return pluginDocuments[uri].get();
+}
+
+void WorkspaceFileResolver::invalidatePluginDocument(const lsp::DocumentUri& uri)
+{
+    pluginDocuments.erase(uri);
+}
+
+void WorkspaceFileResolver::clearPluginDocuments()
+{
+    pluginDocuments.clear();
+}
+
+std::optional<Luau::LanguageServer::Plugin::TransformResult> WorkspaceFileResolver::applyPluginTransformation(
+    const std::string& source, const Uri& uri, const std::string& moduleName) const
+{
+    if (!pluginManager || !pluginManager->hasPlugins())
+        return std::nullopt;
+
+    // Plugins should not apply to their own source files
+    if (pluginManager->isPluginFile(uri))
+        return std::nullopt;
+
+    auto edits = pluginManager->transform(source, uri, moduleName);
+    if (edits.empty())
+        return std::nullopt;
+
+    try
+    {
+        return Luau::LanguageServer::Plugin::SourceMapping::fromEdits(source, edits);
+    }
+    catch (const std::exception& e)
+    {
+        if (client)
+            client->sendLogMessage(lsp::MessageType::Error, "Failed to apply plugin transformation: " + std::string(e.what()));
+        return std::nullopt;
+    }
 }
 
 const TextDocument* WorkspaceFileResolver::getTextDocumentFromModuleName(const Luau::ModuleName& name) const
@@ -79,8 +152,17 @@ std::optional<Luau::SourceCode> WorkspaceFileResolver::readSource(const Luau::Mo
     auto uri = getUri(name);
     auto sourceType = platform->sourceCodeTypeFromPath(uri);
 
+    // Check if this is a managed file - use getTextDocument which handles plugin transformation
+    if (auto* textDoc = getTextDocument(uri))
+        return Luau::SourceCode{textDoc->getText(), sourceType};
+
+    // Fallback to reading from platform
     if (auto source = platform->readSourceCode(name, uri))
+    {
+        if (auto transformed = applyPluginTransformation(*source, uri, name))
+            return Luau::SourceCode{std::move(transformed->transformedSource), sourceType};
         return Luau::SourceCode{*source, sourceType};
+    }
 
     return std::nullopt;
 }
@@ -89,29 +171,6 @@ std::optional<Luau::ModuleInfo> WorkspaceFileResolver::resolveModule(
     const Luau::ModuleInfo* context, Luau::AstExpr* node, const Luau::TypeCheckLimits& limits)
 {
     return platform->resolveModule(context, node, limits);
-}
-
-std::optional<Luau::ModuleInfo> WorkspaceFileResolver::resolveRequireLikeImport(
-    const Luau::ModuleName& currentModule, const Luau::AstExprCall& call)
-{
-    auto maybeShared = types::matchShared(call);
-    if (!maybeShared)
-        return std::nullopt;
-
-    auto* str = (*maybeShared)->as<Luau::AstExprConstantString>();
-    if (!str)
-        return std::nullopt;
-
-    auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform);
-    if (!robloxPlatform)
-        return std::nullopt;
-
-    std::string fileName(str->value.data, str->value.size);
-    auto result = robloxPlatform->resolveSharedModuleName(fileName);
-    if (result.status == SharedModuleResult::Found)
-        return Luau::ModuleInfo{result.moduleName};
-
-    return std::nullopt;
 }
 
 std::string WorkspaceFileResolver::getHumanReadableModuleName(const Luau::ModuleName& name) const
@@ -293,4 +352,23 @@ const Luau::Config& WorkspaceFileResolver::readConfigRec(const Uri& uri, const L
 void WorkspaceFileResolver::clearConfigCache()
 {
     configCache.clear();
+}
+
+bool WorkspaceFileResolver::isPluginFile(const Luau::ModuleName& name) const
+{
+    if (!pluginManager || !pluginManager->hasPlugins())
+        return false;
+
+    auto uri = getUri(name);
+    if (uri.scheme != "file")
+        return false;
+
+    return pluginManager->isPluginFile(uri);
+}
+
+std::optional<std::string> WorkspaceFileResolver::getEnvironmentForModule(const Luau::ModuleName& name) const
+{
+    if (isPluginFile(name))
+        return "LSPPlugin";
+    return std::nullopt;
 }

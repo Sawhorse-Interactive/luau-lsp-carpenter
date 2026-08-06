@@ -415,10 +415,10 @@ TEST_CASE_FIXTURE(Fixture, "print_moonwave_documentation")
     auto documentation = printMoonwaveDocumentation(comments);
 
     CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Param(s):**\n"
+                            "\n\n**Parameters**\n"
                             "\n- `x` number -- Input number"
-                            "\n\n**Return(s):**"
-                            "\n\nnumber");
+                            "\n\n**Returns**\n"
+                            "\n- number");
 }
 
 TEST_CASE_FIXTURE(Fixture, "print_throws_info")
@@ -446,12 +446,12 @@ TEST_CASE_FIXTURE(Fixture, "print_throws_info")
     auto documentation = printMoonwaveDocumentation(comments);
 
     CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Param(s):**\n"
+                            "\n\n**Parameters**\n"
                             "\n- `x` number -- Input number"
-                            "\n\n**Return(s):**"
-                            "\n\nnumber"
-                            "\n\n**Throws:**"
-                            "\n\n`NotANumber` -- Input is not a number");
+                            "\n\n**Returns**\n"
+                            "\n- number"
+                            "\n\n**Throws**\n"
+                            "\n- `NotANumber` -- Input is not a number");
 }
 
 TEST_CASE_FIXTURE(Fixture, "ignored_tags")
@@ -479,7 +479,7 @@ TEST_CASE_FIXTURE(Fixture, "ignored_tags")
     auto documentation = printMoonwaveDocumentation(comments);
 
     CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Param(s):**\n"
+                            "\n\n**Parameters**\n"
                             "\n- `x` number -- Testing");
 }
 
@@ -645,137 +645,6 @@ end
     // Should only get "Does physics simulation", not the section header
     REQUIRE_EQ(1, comments.size());
     CHECK(comments[0] == "Does physics simulation");
-}
-
-TEST_CASE_FIXTURE(Fixture, "triple_dash_at_param")
-{
-    auto result = check(R"(
-        ---Prints something to the output.
-        ---@param bar any? The data to print to the output.
-        function foo(bar: any?)
-            print("result:", bar)
-        end
-    )");
-
-    REQUIRE_EQ(0, result.errors.size());
-
-    auto ty = requireType("foo");
-    auto ftv = Luau::get<Luau::FunctionType>(ty);
-    REQUIRE(ftv);
-    REQUIRE(ftv->definition);
-
-    auto comments = getComments(ftv->definition->definitionLocation);
-    REQUIRE_EQ(2, comments.size());
-    CHECK(comments[0] == "Prints something to the output.");
-    CHECK(comments[1] == "@param bar any? The data to print to the output.");
-}
-
-TEST_CASE_FIXTURE(Fixture, "triple_dash_at_return")
-{
-    auto result = check(R"(
-        ---Adds 5 to the input number
-        ---@param x number The input number
-        ---@return number The result
-        function add5(x: number)
-            return x + 5
-        end
-    )");
-
-    REQUIRE_EQ(0, result.errors.size());
-
-    auto ty = requireType("add5");
-    auto ftv = Luau::get<Luau::FunctionType>(ty);
-    REQUIRE(ftv);
-    REQUIRE(ftv->definition);
-
-    auto comments = getComments(ftv->definition->definitionLocation);
-    REQUIRE_EQ(3, comments.size());
-    CHECK(comments[0] == "Adds 5 to the input number");
-    CHECK(comments[1] == "@param x number The input number");
-    CHECK(comments[2] == "@return number The result");
-}
-
-TEST_CASE_FIXTURE(Fixture, "triple_dash_mixed_space_and_annotation")
-{
-    auto result = check(R"(
-        --- Adds 5 to the input number
-        ---@param x number -- The number to add 5 to
-        ---@return number -- Returns x with 5 added
-        function add5(x: number)
-            return x + 5
-        end
-    )");
-
-    REQUIRE_EQ(0, result.errors.size());
-
-    auto ty = requireType("add5");
-    auto ftv = Luau::get<Luau::FunctionType>(ty);
-    REQUIRE(ftv);
-    REQUIRE(ftv->definition);
-
-    auto comments = getComments(ftv->definition->definitionLocation);
-    REQUIRE_EQ(3, comments.size());
-    CHECK(comments[0] == "Adds 5 to the input number");
-    CHECK(comments[1] == "@param x number -- The number to add 5 to");
-    CHECK(comments[2] == "@return number -- Returns x with 5 added");
-}
-
-TEST_CASE_FIXTURE(Fixture, "triple_dash_moonwave_output_matches_block_comment")
-{
-    auto result = check(R"(
-        ---Adds 5 to the input number
-        ---@param x number -- Input number
-        ---@return number
-        function foo(x: number)
-            return x + 5
-        end
-    )");
-
-    REQUIRE_EQ(0, result.errors.size());
-
-    auto ty = requireType("foo");
-    auto ftv = Luau::get<Luau::FunctionType>(ty);
-    REQUIRE(ftv);
-    REQUIRE(ftv->definition);
-
-    auto comments = getComments(ftv->definition->definitionLocation);
-    auto documentation = printMoonwaveDocumentation(comments);
-
-    CHECK_EQ(documentation, "Adds 5 to the input number\n"
-                            "\n\n**Param(s):**\n"
-                            "\n- `x` number -- Input number"
-                            "\n\n**Return(s):**"
-                            "\n\nnumber");
-}
-
-TEST_CASE("extract_moonwave_param_doc_finds_matching_param")
-{
-    std::vector<std::string> comments = {"Does something", "@param x number -- The input", "@param y string -- The name"};
-
-    auto result = extractMoonwaveParamDoc(comments, "x");
-    REQUIRE(result);
-    CHECK_EQ(*result, "number -- The input");
-
-    auto result2 = extractMoonwaveParamDoc(comments, "y");
-    REQUIRE(result2);
-    CHECK_EQ(*result2, "string -- The name");
-}
-
-TEST_CASE("extract_moonwave_param_doc_returns_nullopt_for_missing_param")
-{
-    std::vector<std::string> comments = {"Does something", "@param x number -- The input"};
-
-    auto result = extractMoonwaveParamDoc(comments, "z");
-    CHECK(!result);
-}
-
-TEST_CASE("extract_moonwave_param_doc_handles_param_without_description")
-{
-    std::vector<std::string> comments = {"@param x"};
-
-    auto result = extractMoonwaveParamDoc(comments, "x");
-    REQUIRE(result);
-    CHECK_EQ(*result, "");
 }
 
 TEST_SUITE_END();
