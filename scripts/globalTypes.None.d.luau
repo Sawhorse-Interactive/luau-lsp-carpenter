@@ -57,8 +57,31 @@ declare function warn<T...>(...: T...)
 @[deprecated { use = "task.spawn" }]
 declare function spawn(callback: (dt: number, gt: number) -> ())
 
-declare class EnumAccessModifierType extends EnumItem end
-declare class EnumAccessModifierType_INTERNAL extends Enum
+type AdReward = any
+type AnimTrackMetadata = any
+type AnimTrackPlayState = any
+type AnimTrackWeight = any
+type AssetContentMap = any
+type CSGPropertyData = any
+type ClipEvaluator = any
+type CollectionHandle = any
+type Color3uint8 = any
+type FacsReplicationData = any
+type InfoTypeArray = any
+type NetAssetRef = any
+type OpenCloudModel = any
+type ProductIdentifierArray = any
+type RankedItemArray = any
+type ReplicationPV = any
+type ScopedInstanceIdentity = any
+type SharedString = any
+type SystemAddress = any
+type UniqueId = any
+type VideoSampleArray = any
+type WebViewParams = any
+
+declare extern type EnumAccessModifierType extends EnumItem with end
+declare extern type EnumAccessModifierType_INTERNAL extends Enum with
 	Allow: EnumAccessModifierType
 	Deny: EnumAccessModifierType
 	function GetEnumItems(self): { EnumAccessModifierType }
@@ -1867,8 +1890,18 @@ declare class EnumCustomCameraMode_INTERNAL extends Enum
 	function FromName(self, Name: string): EnumCustomCameraMode?
 	function FromValue(self, Value: number): EnumCustomCameraMode?
 end
-declare class EnumDataModelExtractorFileType extends EnumItem end
-declare class EnumDataModelExtractorFileType_INTERNAL extends Enum
+declare extern type EnumDataModelChangeType extends EnumItem with end
+declare extern type EnumDataModelChangeType_INTERNAL extends Enum with
+	Add: EnumDataModelChangeType
+	AddPackage: EnumDataModelChangeType
+	Modify: EnumDataModelChangeType
+	Remove: EnumDataModelChangeType
+	function GetEnumItems(self): { EnumDataModelChangeType }
+	function FromName(self, Name: string): EnumDataModelChangeType?
+	function FromValue(self, Value: number): EnumDataModelChangeType?
+end
+declare extern type EnumDataModelExtractorFileType extends EnumItem with end
+declare extern type EnumDataModelExtractorFileType_INTERNAL extends Enum with
 	FirstSlice: EnumDataModelExtractorFileType
 	NonFirstSlice: EnumDataModelExtractorFileType
 	PlaceFile: EnumDataModelExtractorFileType
@@ -5583,8 +5616,21 @@ declare class EnumSlimTintMode_INTERNAL extends Enum
 	function FromName(self, Name: string): EnumSlimTintMode?
 	function FromValue(self, Value: number): EnumSlimTintMode?
 end
-declare class EnumSolidPrimitiveType extends EnumItem end
-declare class EnumSolidPrimitiveType_INTERNAL extends Enum
+declare extern type EnumSlimTranscoderStatus extends EnumItem with end
+declare extern type EnumSlimTranscoderStatus_INTERNAL extends Enum with
+	Failed: EnumSlimTranscoderStatus
+	InProgress: EnumSlimTranscoderStatus
+	NoHash: EnumSlimTranscoderStatus
+	NotUploaded: EnumSlimTranscoderStatus
+	Succeeded: EnumSlimTranscoderStatus
+	Unknown: EnumSlimTranscoderStatus
+	Uploaded: EnumSlimTranscoderStatus
+	function GetEnumItems(self): { EnumSlimTranscoderStatus }
+	function FromName(self, Name: string): EnumSlimTranscoderStatus?
+	function FromValue(self, Value: number): EnumSlimTranscoderStatus?
+end
+declare extern type EnumSolidPrimitiveType extends EnumItem with end
+declare extern type EnumSolidPrimitiveType_INTERNAL extends Enum with
 	Capsule: EnumSolidPrimitiveType
 	Cone: EnumSolidPrimitiveType
 	RoundedBox: EnumSolidPrimitiveType
@@ -6855,8 +6901,16 @@ declare class EnumVelocityConstraintMode_INTERNAL extends Enum
 	function FromName(self, Name: string): EnumVelocityConstraintMode?
 	function FromValue(self, Value: number): EnumVelocityConstraintMode?
 end
-declare class EnumVerticalAlignment extends EnumItem end
-declare class EnumVerticalAlignment_INTERNAL extends Enum
+declare extern type EnumVerifiedLevel extends EnumItem with end
+declare extern type EnumVerifiedLevel_INTERNAL extends Enum with
+	High: EnumVerifiedLevel
+	Low: EnumVerifiedLevel
+	function GetEnumItems(self): { EnumVerifiedLevel }
+	function FromName(self, Name: string): EnumVerifiedLevel?
+	function FromValue(self, Value: number): EnumVerifiedLevel?
+end
+declare extern type EnumVerticalAlignment extends EnumItem with end
+declare extern type EnumVerticalAlignment_INTERNAL extends Enum with
 	Bottom: EnumVerticalAlignment
 	Center: EnumVerticalAlignment
 	Top: EnumVerticalAlignment
@@ -7338,6 +7392,7 @@ type ENUM_LIST = {
 	CreatorTypeFilter: EnumCreatorTypeFilter_INTERNAL,
 	CurrencyType: EnumCurrencyType_INTERNAL,
 	CustomCameraMode: EnumCustomCameraMode_INTERNAL,
+	DataModelChangeType: EnumDataModelChangeType_INTERNAL,
 	DataModelExtractorFileType: EnumDataModelExtractorFileType_INTERNAL,
 	DataStoreRequestType: EnumDataStoreRequestType_INTERNAL,
 	DebugBreakModeType: EnumDebugBreakModeType_INTERNAL,
@@ -7650,6 +7705,7 @@ type ENUM_LIST = {
 	SimulationMode: EnumSimulationMode_INTERNAL,
 	SizeConstraint: EnumSizeConstraint_INTERNAL,
 	SlimTintMode: EnumSlimTintMode_INTERNAL,
+	SlimTranscoderStatus: EnumSlimTranscoderStatus_INTERNAL,
 	SolidPrimitiveType: EnumSolidPrimitiveType_INTERNAL,
 	SolverConvergenceMetricType: EnumSolverConvergenceMetricType_INTERNAL,
 	SolverConvergenceVisualizationMode: EnumSolverConvergenceVisualizationMode_INTERNAL,
@@ -7756,6 +7812,7 @@ type ENUM_LIST = {
 	VRTouchpad: EnumVRTouchpad_INTERNAL,
 	VRTouchpadMode: EnumVRTouchpadMode_INTERNAL,
 	VelocityConstraintMode: EnumVelocityConstraintMode_INTERNAL,
+	VerifiedLevel: EnumVerifiedLevel_INTERNAL,
 	VerticalAlignment: EnumVerticalAlignment_INTERNAL,
 	VerticalScrollBarPosition: EnumVerticalScrollBarPosition_INTERNAL,
 	VibrationMotor: EnumVibrationMotor_INTERNAL,
@@ -8824,6 +8881,12 @@ type VirtualInputPointerAction = {
 
 type BatchDataStoreGetOptions = { }
 
+type CameraState = {
+    CFrame: CFrame,
+    FieldOfView: number,
+    ViewportSize: Vector2,
+}
+
 
 type ProductIdentifierArray = any
 type ReflectedClassOrNil = any
@@ -8869,7 +8932,10 @@ declare class ConfigSnapshot extends Object
 	function Refresh(self): nil
 end
 
-declare class EditableImage extends Object
+declare extern type DataModelDiff extends Object with
+end
+
+declare extern type EditableImage extends Object with
 	Size: Vector2
 	function Destroy(self): nil
 	function DrawCircle(self, center: Vector2, radius: number, color: Color3, transparency: number, combineType: EnumImageCombineType, antiAliasing: EnumAntiAliasing?): nil
@@ -9953,7 +10019,6 @@ declare class RootImportData extends BaseImportData
 	ScaleUnit: EnumMeshScaleUnit
 	UseSceneOriginAsPivot: boolean
 	UsesCages: boolean
-	ValidateUgcBody: boolean
 	VersionedAssetId: number
 	WorldForward: EnumNormalId
 	WorldUp: EnumNormalId
@@ -12827,7 +12892,12 @@ end
 declare class MemStorageService extends Instance
 end
 
-declare class MemoryStoreHashMap extends Instance
+declare extern type MemoryStoreDistributedCounter extends Instance with
+	function GetAsync(self): number
+	function IncrementAsync(self, delta: number, expiration: number): number
+end
+
+declare extern type MemoryStoreHashMap extends Instance with
 	function GetAsync(self, key: string): any
 	function ListItemsAsync(self, count: number): MemoryStoreHashMapPages
 	function RemoveAsync(self, key: string): nil
@@ -12842,7 +12912,8 @@ declare class MemoryStoreQueue extends Instance
 	function RemoveAsync(self, id: string): nil
 end
 
-declare class MemoryStoreService extends Instance
+declare extern type MemoryStoreService extends Instance with
+	function GetDistributedCounter(self, name: string): MemoryStoreDistributedCounter
 	function GetHashMap(self, name: string): MemoryStoreHashMap
 	function GetQueue(self, name: string, invisibilityTimeout: number?): MemoryStoreQueue
 	function GetSortedMap(self, name: string): MemoryStoreSortedMap
@@ -13077,6 +13148,7 @@ declare class BasePart extends PVInstance
 	function ApplyAngularImpulse(self, impulse: Vector3): nil
 	function ApplyImpulse(self, impulse: Vector3): nil
 	function ApplyImpulseAtPosition(self, impulse: Vector3, position: Vector3): nil
+	function BindToCollisionSummaries(self, callback: ((...any) -> ...any)): RBXScriptConnection
 	function CanCollideWith(self, part: BasePart): boolean
 	function CanSetNetworkOwnership(self): (boolean, string)
 	function GetClosestPointOnSurface(self, position: Vector3): Vector3
@@ -13783,7 +13855,7 @@ declare class Player extends Instance
 	function HasAppearanceLoaded(self): boolean
 	function IsFriendsWithAsync(self, userId: User): boolean
 	function IsInGroupAsync(self, groupId: number): boolean
-	function IsVerified(self): boolean
+	function IsVerified(self, level: EnumVerifiedLevel?): boolean
 	function Kick(self, message: string?): nil
 	function LoadCharacterAsync(self): nil
 	function LoadCharacterWithHumanoidDescriptionAsync(self, humanoidDescription: HumanoidDescription, assetTypeVerification: EnumAssetTypeVerification?): nil
@@ -15595,8 +15667,10 @@ declare class UIShadow extends UIComponent
 	BlurRadius: UDim
 	Color: Color3
 	Enabled: boolean
+	Inset: boolean
 	Mode: EnumApplyShadowMode
 	Offset: UDim2
+	ShowBehindParent: boolean
 	Spread: UDim2
 	Transparency: number
 	ZIndex: number
