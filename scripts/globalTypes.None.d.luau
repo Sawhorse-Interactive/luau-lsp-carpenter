@@ -8888,6 +8888,7 @@ type CameraState = {
 }
 
 
+
 type ProductIdentifierArray = any
 type ReflectedClassOrNil = any
 type VideoSampleArray = any
@@ -12890,6 +12891,11 @@ declare class MemStorageConnection extends Instance
 end
 
 declare class MemStorageService extends Instance
+end
+
+declare extern type MemoryStoreDistributedCounter extends Instance with
+	function GetAsync(self): number
+	function IncrementAsync(self, delta: number, expiration: number): number
 end
 
 declare extern type MemoryStoreDistributedCounter extends Instance with
