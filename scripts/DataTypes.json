@@ -5690,6 +5690,34 @@
                 }
             ],
             "Name": "User"
+        },
+        {
+            "Members": [
+                {
+                    "MemberType": "Function",
+                    "Name": "Get",
+                    "Parameters": [],
+                    "ReturnType": {
+                        "Name": "Instance?"
+                    }
+                },
+                {
+                    "MemberType": "Function",
+                    "Name": "Wait",
+                    "Parameters": [
+                        {
+                            "Name": "timeout",
+                            "Type": {
+                                "Name": "number?"
+                            }
+                        }
+                    ],
+                    "ReturnType": {
+                        "Name": "Instance?"
+                    }
+                }
+            ],
+            "Name": "InstanceHandle"
         }
     ]
 }
