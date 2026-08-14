@@ -8950,6 +8950,7 @@ type CameraState = {
 
 
 
+
 type InfoTypeArray = any
 type ProductIdentifierArray = any
 type RankedItemArray = any
@@ -10063,6 +10064,18 @@ declare class AudioTremolo extends Instance
 	Skew: number
 	Square: number
 	WiringChanged: RBXScriptSignal<boolean, string, Wire, Instance>
+	function GetConnectedWires(self, pin: string): { Instance }
+	function GetInputPins(self): { any }
+	function GetOutputPins(self): { any }
+end
+
+declare extern type AudioWindSynthesizer extends Instance with
+	Enabled: boolean
+	PositionInstance: Instance
+	PositionType: EnumAudioPositionType
+	Profile: EnumWindSoundProfile
+	Volume: number
+	WiringChanged: RBXScriptSignal<(boolean, string, Wire, Instance)>
 	function GetConnectedWires(self, pin: string): { Instance }
 	function GetInputPins(self): { any }
 	function GetOutputPins(self): { any }
