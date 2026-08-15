@@ -15,7 +15,9 @@ cmake-build-relwithdebinfo-visual-studio/
 CMakeFiles
 sourcemap.json
 trace.json
-.claude
+.claude/handoffs/
+.claude/prompts/
+.claude/settings.local.json
 .serena
 .mcp.json
 compile_commands.json
