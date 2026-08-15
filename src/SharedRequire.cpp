@@ -10,7 +10,6 @@
 
 #include "LSP/WorkspaceFileResolver.hpp"
 
-LUAU_FASTFLAG(LuauSolverV2)
 
 namespace LSP::SharedRequire
 {
@@ -281,20 +280,10 @@ void registerGlobal(Luau::GlobalTypes& globals)
     // The table half: Roblox's `shared` is a plain shared table, so `shared.foo` must keep
     // type checking. Upstream declares it as `any`; an indexer preserves that permissiveness.
     //
-    // Only the old solver gets it. The new solver dispatches magic functions solely when the
-    // callee is directly a FunctionType (ConstraintSolver::tryDispatch for FunctionCallConstraint;
-    // an IntersectionType is collapsed only when every member is the same pointer, and there is
-    // no __call path). Wrapping the callable in an intersection there would silently disable
-    // resolution and hand back `any` - the exact failure this feature exists to fix. Callability
-    // is the whole point of shared(), so it wins when the two cannot coexist.
-    // GlobalTypes::mode is fixed at construction and is not updated by Frontend::setLuauSolverMode,
-    // so it is not a reliable signal here. Gate on the fflag, matching WorkspaceFolder::loadDefinitionFile.
-    if (FFlag::LuauSolverV2)
-    {
-        Luau::addGlobalBinding(globals, kGlobalName, callTypeId, "@luau-lsp/global/shared");
-        return;
-    }
-
+    // Both solvers dispatch the magic function through this intersection: the old solver walks
+    // the overloads, and the new solver relies on the fork's intersection-aware magic lookup in
+    // ConstraintSolver::tryDispatch for FunctionCallConstraint (upstream only checks a callee
+    // that is directly a FunctionType).
     Luau::TableType tableType{Luau::TableState::Sealed, Luau::TypeLevel{}, globals.globalScope.get()};
     tableType.indexer = Luau::TableIndexer{anyType, anyType};
     const Luau::TypeId tableTypeId = arena.addType(std::move(tableType));

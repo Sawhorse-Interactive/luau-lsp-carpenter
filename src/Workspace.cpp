@@ -459,7 +459,13 @@ void WorkspaceFolder::buildSharedRequireIndex(const ClientConfiguration& config)
 
     platform->sharedRequireIndex.clear();
 
-    Luau::FileUtils::traverseDirectoryRecursive(rootUri.fsPath(),
+    // A client may hand us a root URI that has no filesystem path (empty, or a non-file scheme).
+    // Traversing it is meaningless, and on Windows an empty path trips an assertion in fromUtf8.
+    auto rootPath = rootUri.fsPath();
+    if (rootPath.empty())
+        return;
+
+    Luau::FileUtils::traverseDirectoryRecursive(rootPath,
         [&](auto& path)
         {
             auto uri = Uri::file(path);
