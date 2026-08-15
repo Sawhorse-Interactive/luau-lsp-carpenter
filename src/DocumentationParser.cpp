@@ -502,13 +502,22 @@ std::vector<std::string> WorkspaceFolder::getComments(const Luau::ModuleName& mo
         // Parse the comment text for information
         if (comment.type == Luau::Lexeme::Type::Comment)
         {
-            if (Luau::startsWith(commentText, "--- "))
+            if (Luau::startsWith(commentText, "---"))
             {
-                comments.emplace_back(commentText.substr(4));
-            }
-            else if (commentText == "---")
-            {
-                comments.emplace_back("\n");
+                auto contents = commentText.substr(3);
+
+                // A divider comment ("---", "-----", ...) only contributes a line break
+                if (contents.find_first_not_of('-') == std::string::npos)
+                {
+                    comments.emplace_back("\n");
+                }
+                else
+                {
+                    // A single space after the "---" prefix is a separator, not part of the documentation
+                    if (Luau::startsWith(contents, " "))
+                        contents = contents.substr(1);
+                    comments.emplace_back(contents);
+                }
             }
         }
         else if (comment.type == Luau::Lexeme::Type::BlockComment)

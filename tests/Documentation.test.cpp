@@ -506,6 +506,62 @@ TEST_CASE_FIXTURE(Fixture, "singleline_comments_preserve_newlines")
     CHECK_EQ("A sample class.", comments[2]);
 }
 
+TEST_CASE_FIXTURE(Fixture, "singleline_comments_without_space_after_prefix")
+{
+    auto result = check(R"(
+        ---Description for `foo` function.
+        ---@param bar -- Description for `bar` param.
+        ---@return result -- Description for the returned result.
+        function foo(bar: string): boolean
+            return true
+        end
+    )");
+
+    REQUIRE_EQ(0, result.errors.size());
+
+    auto ty = requireType("foo");
+    auto ftv = Luau::get<Luau::FunctionType>(ty);
+    REQUIRE(ftv);
+    REQUIRE(ftv->definition);
+
+    auto comments = getComments(ftv->definition->definitionLocation);
+    REQUIRE_EQ(3, comments.size());
+    CHECK_EQ("Description for `foo` function.", comments[0]);
+    CHECK_EQ("@param bar -- Description for `bar` param.", comments[1]);
+    CHECK_EQ("@return result -- Description for the returned result.", comments[2]);
+
+    CHECK_EQ(printMoonwaveDocumentation(comments),
+        "Description for `foo` function.\n"
+        "\n\n**Parameters**\n"
+        "\n- `bar` -- Description for `bar` param."
+        "\n\n**Returns**\n"
+        "\n- `result` -- Description for the returned result.");
+}
+
+TEST_CASE_FIXTURE(Fixture, "singleline_comment_divider_is_a_newline")
+{
+    auto result = check(R"(
+        ---Documented
+        -----
+        ---Still documented
+        function foo()
+        end
+    )");
+
+    REQUIRE_EQ(0, result.errors.size());
+
+    auto ty = requireType("foo");
+    auto ftv = Luau::get<Luau::FunctionType>(ty);
+    REQUIRE(ftv);
+    REQUIRE(ftv->definition);
+
+    auto comments = getComments(ftv->definition->definitionLocation);
+    REQUIRE_EQ(3, comments.size());
+    CHECK_EQ("Documented", comments[0]);
+    CHECK_EQ("\n", comments[1]);
+    CHECK_EQ("Still documented", comments[2]);
+}
+
 TEST_CASE_FIXTURE(Fixture, "section_header_not_attached_to_function")
 {
     auto result = check(R"(
