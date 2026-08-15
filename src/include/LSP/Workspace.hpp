@@ -117,6 +117,9 @@ public:
 
     void indexFiles(const ClientConfiguration& config);
 
+    /// (Re)builds the filename index backing the fork-custom `shared("Name")` string require.
+    void buildSharedRequireIndex(const ClientConfiguration& config);
+
     Luau::CheckResult checkSimple(const Luau::ModuleName& moduleName, const LSPCancellationToken& cancellationToken);
     Luau::CheckResult checkStrict(const Luau::ModuleName& moduleName, const LSPCancellationToken& cancellationToken, bool forAutocomplete = true);
     // TODO: Clip once new type solver is live

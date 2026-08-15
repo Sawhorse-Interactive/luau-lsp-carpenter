@@ -54,6 +54,7 @@ target_sources(Luau.LanguageServer PRIVATE
         src/DocumentationParser.cpp
         src/LuauExt.cpp
         src/LuauFileUtils.cpp
+        src/SharedRequire.cpp
         src/IostreamHelpers.cpp
         src/Utils.cpp
         src/Flags.cpp
@@ -120,6 +121,7 @@ target_sources(Luau.LanguageServer.Test PRIVATE
         tests/AutoImports.test.cpp
         tests/Bytecode.test.cpp
         tests/MagicFunctions.test.cpp
+        tests/SharedRequire.test.cpp
         tests/Documentation.test.cpp
         tests/TextDocument.test.cpp
         tests/Uri.test.cpp

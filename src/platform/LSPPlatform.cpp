@@ -182,6 +182,42 @@ std::optional<Luau::ModuleInfo> LSPPlatform::resolveStringRequire(
 
 std::optional<Luau::ModuleInfo> LSPPlatform::resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node, const Luau::TypeCheckLimits& limits)
 {
+    // Handle the fork-custom shared("Name") string require.
+    //
+    // The luau fork seeds the RequireTracer with the call node rather than its argument for
+    // require-like globals other than `require`, which is what lets this branch distinguish
+    // shared("Foo") from require("Foo") - both otherwise arrive here as a bare string.
+    if (auto* call = node->as<Luau::AstExprCall>())
+    {
+        if (auto literal = LSP::SharedRequire::matchSharedCall(*call))
+        {
+            if (!context)
+                return std::nullopt;
+
+            std::string name((*literal)->value.data, (*literal)->value.size);
+            auto resolved = sharedRequireIndex.resolve(name, context->name, *fileResolver);
+
+            switch (resolved.status)
+            {
+            case LSP::SharedRequire::ResolveStatus::Found:
+                return Luau::ModuleInfo{resolved.moduleName};
+            case LSP::SharedRequire::ResolveStatus::Ambiguous:
+            {
+                // Resolve to a name that cannot exist so that Luau reports it as an unknown
+                // require against the requiring line, listing what actually tied.
+                std::string detail = "ambiguous shared module \"" + name + "\" (matches ";
+                for (size_t i = 0; i < resolved.candidates.size(); ++i)
+                    detail += (i == 0 ? "" : ", ") + resolved.candidates[i];
+                return Luau::ModuleInfo{detail + ")"};
+            }
+            case LSP::SharedRequire::ResolveStatus::NotFound:
+                return Luau::ModuleInfo{"unknown shared module \"" + name + "\""};
+            }
+
+            return std::nullopt;
+        }
+    }
+
     // Handle require("path") for compatibility
     if (auto* expr = node->as<Luau::AstExprConstantString>())
     {

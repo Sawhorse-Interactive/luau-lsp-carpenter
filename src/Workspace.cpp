@@ -38,6 +38,10 @@ void WorkspaceFolder::openTextDocument(const lsp::DocumentUri& uri, const lsp::D
     // Mark the file as dirty as we don't know what changes were made to it
     auto moduleName = fileResolver.getModuleName(uri);
     frontend.markDirty(moduleName);
+
+    // A freshly created file may not be on disk yet, and no watched-file event will have been
+    // seen for it. Register it so that shared() can resolve to it immediately.
+    platform->sharedRequireIndex.add(uri, rootUri);
 }
 
 static bool isWorkspaceDiagnosticsEnabled(const Client* client, const ClientConfiguration& config)
@@ -236,7 +240,14 @@ void WorkspaceFolder::onDidChangeWatchedFiles(const std::vector<lsp::FileEvent>&
             frontend.markDirty(moduleName, &dirtyFiles);
 
             if (change.type == lsp::FileChangeType::Deleted)
+            {
+                platform->sharedRequireIndex.remove(change.uri, rootUri);
                 deletedFiles.push_back(change.uri);
+            }
+            else if (!isIgnoredFile(change.uri, config))
+            {
+                platform->sharedRequireIndex.add(change.uri, rootUri);
+            }
         }
     }
 
@@ -440,6 +451,26 @@ void WorkspaceFolder::indexFiles(const ClientConfiguration& config)
     client->sendTrace("workspace: indexing all files COMPLETED");
 }
 
+void WorkspaceFolder::buildSharedRequireIndex(const ClientConfiguration& config)
+{
+    LUAU_TIMETRACE_SCOPE("WorkspaceFolder::buildSharedRequireIndex", "LSP");
+    if (isNullWorkspace())
+        return;
+
+    platform->sharedRequireIndex.clear();
+
+    Luau::FileUtils::traverseDirectoryRecursive(rootUri.fsPath(),
+        [&](auto& path)
+        {
+            auto uri = Uri::file(path);
+            auto ext = uri.extension();
+            if ((ext == ".lua" || ext == ".luau") && !isDefinitionFile(uri, config) && !isIgnoredFile(uri, config))
+                platform->sharedRequireIndex.add(uri, rootUri);
+        });
+
+    client->sendTrace("workspace: indexed " + std::to_string(platform->sharedRequireIndex.fileCount()) + " files for shared() resolution");
+}
+
 static void clearDisabledGlobals(const Client* client, const Luau::GlobalTypes& globalTypes, const std::vector<std::string>& disabledGlobals)
 {
     const auto targetScope = globalTypes.globalScope;
@@ -514,6 +545,12 @@ Luau::LoadDefinitionFileResult WorkspaceFolder::loadDefinitionFile(
 
     platform->mutateRegisteredDefinitions(frontend.globals, metadata);
     platform->mutateRegisteredDefinitions(frontend.globalsForAutocomplete, metadata);
+
+    // Rebind `shared` after every definition load: globalTypes.d.luau declares `shared: any`,
+    // which would otherwise clobber the callable string-require binding.
+    LSP::SharedRequire::registerGlobal(frontend.globals);
+    if (!FFlag::LuauSolverV2)
+        LSP::SharedRequire::registerGlobal(frontend.globalsForAutocomplete);
 
     if (result.success)
     {
@@ -704,6 +741,10 @@ void WorkspaceFolder::setupWithConfiguration(const ClientConfiguration& configur
         fileResolver.pluginManager.reset();
         fileResolver.clearPluginDocuments();
     }
+
+    // Independent of configuration.index: shared() resolution must work even when workspace
+    // indexing is disabled, and it must be populated before any module is parsed.
+    buildSharedRequireIndex(configuration);
 
     if (configuration.index.enabled)
         indexFiles(configuration);

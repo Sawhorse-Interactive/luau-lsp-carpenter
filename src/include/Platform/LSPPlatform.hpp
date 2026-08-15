@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LSP/ClientConfiguration.hpp"
+#include "LSP/SharedRequire.hpp"
 #include "LSP/TextDocument.hpp"
 #include "Platform/StringRequireTypes.hpp"
 #include "Luau/Ast.h"
@@ -41,6 +42,11 @@ protected:
     WorkspaceFolder* workspaceFolder;
 
 public:
+    /// Index backing the fork-custom `shared("Name")` string require.
+    /// Populated by WorkspaceFolder::buildSharedRequireIndex and kept current by
+    /// WorkspaceFolder::onDidChangeWatchedFiles.
+    LSP::SharedRequire::Index sharedRequireIndex;
+
     virtual void mutateRegisteredDefinitions(Luau::GlobalTypes& globals, std::optional<nlohmann::json> metadata) {}
 
     virtual void onDidChangeWatchedFiles(const lsp::FileEvent& change) {}
