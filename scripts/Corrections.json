@@ -1247,12 +1247,6 @@
                     }
                 },
                 {
-                    "Name": "GetJoints",
-                    "ReturnType": {
-                        "Generic": "JointInstance"
-                    }
-                },
-                {
                     "Name": "GetTouchingParts",
                     "ReturnType": {
                         "Generic": "BasePart"
@@ -2389,6 +2383,34 @@
                     ],
                     "ReturnType": {
                         "Declared": "ReflectedClasses"
+                    }
+                },
+                {
+                    "Name": "GetEventsOfClass",
+                    "Parameters": [
+                        {
+                            "Name": "filter",
+                            "Type": {
+                                "Declared": "ReflectionMemberFilter?"
+                            }
+                        }
+                    ],
+                    "ReturnType": {
+                        "Declared": "{ ReflectedEvent }"
+                    }
+                },
+                {
+                    "Name": "GetMethodsOfClass",
+                    "Parameters": [
+                        {
+                            "Name": "filter",
+                            "Type": {
+                                "Declared": "ReflectionMemberFilter?"
+                            }
+                        }
+                    ],
+                    "ReturnType": {
+                        "Declared": "{ ReflectedMethod }"
                     }
                 },
                 {

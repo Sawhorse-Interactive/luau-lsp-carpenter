@@ -3,6 +3,7 @@
 import re
 from typing import List, Literal, Optional, Set, Union, TypedDict
 from collections import defaultdict
+from itertools import chain
 import requests
 import json
 import sys
@@ -14,7 +15,7 @@ API_DUMP_URL = "https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Trac
 LUAU_TYPES_URL = "https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/LuauTypes.d.luau"
 BRICK_COLORS_URL = "https://gist.githubusercontent.com/Anaminus/49ac255a68e7a7bc3cdd72b602d5071f/raw/f1534dcae312dbfda716b7677f8ac338b565afc3/BrickColor.json"
 
-# Whether to include deprecated members that cannot be assigned the @deprecated attribute (i.e. deprecated non-functions). 
+# Whether to include deprecated members that cannot be assigned the @deprecated attribute (i.e. deprecated non-functions).
 # Deprecated functions will always be defined, with their corresponding @deprecated attribute.
 INCLUDE_DEPRECATED_MEMBERS = False
 
@@ -41,48 +42,61 @@ DELETED_LUAU_SECTIONS = [
 LUAU_SNIPPET_PATCHES = {
     "declare function delay(delay: number?, callback: () -> ())":
         "@[deprecated{ use = \"task.delay\" }]\ndeclare function delay(delay: number?, callback: (dt: number, gt: number) -> ())",
-    
+
     "declare function collectgarbage(mode: string): number":
         "@[deprecated{ use = \"gcinfo\" }]\ndeclare function collectgarbage(mode: \"count\"): number",
-    
+
     "declare function stats()":
         "@[deprecated{ use = 'game:GetService(\"Stats\")' }]\ndeclare function stats(): Stats",
-    
-    "declare function wait(delay: number?): (number, number)": 
+
+    "declare function wait(delay: number?): (number, number)":
         "@[deprecated{ use = \"task.wait\" }]\ndeclare function wait(delay: number?): (number, number)",
-    
+
     "declare function printidentity(prefix: string?)":
         "@deprecated declare function printidentity(prefix: string?)",
 
     "declare function version(): string":
         "@deprecated declare function version(): string",
-    
+
     "declare game: any": "declare game: DataModel",
     "declare workspace: any": "declare workspace: Workspace",
     "declare script: any": "declare script: LuaSourceContainer",
 
-    "declare Delay: typeof(delay)": 
+    "declare Delay: typeof(delay)":
         "@[deprecated{ use = \"task.delay\" }]\ndeclare function Delay(delay: number?, callback: (dt: number, gt: number) -> ())",
-    
-    "declare Wait: typeof(wait)": 
+
+    "declare Wait: typeof(wait)":
         "@[deprecated{ use = \"task.wait\" }]\ndeclare function Wait(delay: number?): (number, number)",
-    
-    "declare ElapsedTime: typeof(elapsedTime)": 
+
+    "declare ElapsedTime: typeof(elapsedTime)":
         "@[deprecated{ use = \"elapsedTime\" }]\ndeclare function ElapsedTime(): number",
-    
+
     "declare Stats: typeof(stats)":
         "@[deprecated{ use = 'game:GetService(\"Stats\")' }]\ndeclare function Stats(): Stats",
-    
-    "declare Version: typeof(version)": 
+
+    "declare Version: typeof(version)":
         "@[deprecated{ use = \"version\" }]\ndeclare function Version(): string",
-    
+
     "declare Workspace: any": "",
     "declare Game: any": "",
+
+    "type ReflectedClassOrNil = any": "type ReflectedClassOrNil = ReflectedClass?",
+    "type ReflectedClasses = any": "type ReflectedClasses = { ReflectedClass }",
+    "type ReflectedProperties = any": "type ReflectedProperties = { ReflectedProperty }",
+
+    "type ReflectionClassFilter = {": "export type ReflectionClassFilter = {",
+    "type ReflectionMemberFilter = {": "export type ReflectionMemberFilter = {",
+    "type ReflectionType = {": "export type ReflectionType = {",
+    "type ReflectionParameter = {": "export type ReflectionParameter = {",
+    "type ReflectedProperty = {": "export type ReflectedProperty = {",
+    "type ReflectedMethod = {": "export type ReflectedMethod = {",
+    "type ReflectedEvent = {": "export type ReflectedEvent = {",
+    "type ReflectedClass = {": "export type ReflectedClass = {",
 }
 
 TYPE_INDEX = {
-    "Tuple": "any",
     "Variant": "any",
+    "Tuple": "...any",
     "Function": "((...any) -> ...any)",
     "function": "((...any) -> ...any)",
     "bool": "boolean",
@@ -156,6 +170,12 @@ EXTRA_MEMBERS = {
         "function __unm(self): UDim",
     ],
     "CFrame": [
+        "function ToWorldSpace(self, ...: CFrame): ...CFrame",
+        "function ToObjectSpace(self, ...: CFrame): ...CFrame",
+        "function PointToWorldSpace(self, ...: Vector3): ...Vector3",
+        "function PointToObjectSpace(self, ...: Vector3): ...Vector3",
+        "function VectorToWorldSpace(self, ...: Vector3): ...Vector3",
+        "function VectorToObjectSpace(self, ...: Vector3): ...Vector3",
         "function __add(self, other: Vector3): CFrame",
         "function __sub(self, other: Vector3): CFrame",
         "function __mul(self, other: CFrame): CFrame",
@@ -308,7 +328,7 @@ EXTRA_MEMBERS = {
     "InstanceAdornment": ["Adornee: Instance?"],
     "BasePart": [
         "function GetConnectedParts(self, recursive: boolean?): { BasePart }",
-        "function GetJoints(self): { BasePart }",
+        "function GetJoints(self): { Instance }",
         "function GetNetworkOwner(self): Player?",
         "function GetTouchingParts(self): { BasePart }",
         "function SubtractAsync(self, parts: { BasePart }, collisionfidelity: EnumCollisionFidelity?, renderFidelity: EnumRenderFidelity?): UnionOperation",
@@ -419,7 +439,19 @@ EXTRA_MEMBERS = {
     "AvatarCreationService": [
         "function AutoSetupAvatarAsync(self, player: Player, model: Model, progressCallback: (progressInfo: { Progress: number }) -> ()?): string",
         "function AutoSetupAvatarNewAsync(self, player: Player, autoSetupParams: AutoSetupParams, progressCallback: (progressInfo: { Progress: number }) -> ()?): string"
-    ]
+    ],
+    "AudioEmitter": [
+        "function GetAngleAttenuation(self): { [number]: number }",
+        "function GetDistanceAttenuation(self): { [number]: number }",
+        "function SetAngleAttenuation(self, curve: { [number]: number }): nil",
+        "function SetDistanceAttenuation(self, curve: { [number]: number }): nil",
+    ],
+    "AudioListener": [
+        "function GetAngleAttenuation(self): { [number]: number }",
+        "function GetDistanceAttenuation(self): { [number]: number }",
+        "function SetAngleAttenuation(self, curve: { [number]: number }): nil",
+        "function SetDistanceAttenuation(self, curve: { [number]: number }): nil",
+    ],
 }
 
 # Hardcoded types
@@ -431,23 +463,15 @@ type ProtectedString = string
 type BinaryString = string
 type QDir = string
 type QFont = string
-type FloatCurveKey = any
-type RotationCurveKey = any
-type Secret = any
-type Path2DControlPoint = any
-type UniqueId = any
-type SecurityCapabilities = any
 type TeleportData = boolean | buffer | number | string | {[number]: TeleportData} | {[string]: TeleportData}
-type SystemAddress = any
-type AdReward = any
 
-declare class Enum
+declare extern type Enum with
     function GetEnumItems(self): { any }
     function FromValue(self,Number: number): any
     function FromName(self,Name: string): any
 end
 
-declare class EnumItem
+declare extern type EnumItem with
     Name: string
     Value: number
     EnumType: Enum
@@ -483,13 +507,10 @@ declare function spawn(callback: (dt: number, gt: number) -> ())
 """
 
 POST_DATATYPES_BASE = """
-declare class SharedTable
+declare extern type SharedTable with
   [string | number]: any
   function __iter(self): (any, number) -> (number, any)
 end
-
-export type OpenCloudModel = any
-export type ClipEvaluator = any
 
 export type RBXScriptSignal<T... = ...any> = {
     Wait: (self: RBXScriptSignal<T...>) -> T...,
@@ -503,7 +524,7 @@ type HttpRequestOptions = {
     Method: "GET" | "HEAD" | "POST" | "PUT" | "DELETE" | "CONNECT" | "OPTIONS" | "TRACE" | "PATCH" | nil,
     Headers: { [string]: string | Secret }?,
     Body: string?,
-    Compress: EnumHttpCompression
+    Compress: EnumHttpCompression?,
 }
 
 type HttpResponseData = {
@@ -522,7 +543,7 @@ type HumanoidDescriptionAccessory = {
     Puffiness: number?,
 }
 
-declare class ValueCurveKey
+declare extern type ValueCurveKey with
     Interpolation: EnumKeyInterpolationMode
     Time: number
     Value: any
@@ -546,7 +567,7 @@ export type RaycastResult<T = BasePart> = {
     Distance: number,
 }
 
-declare class GlobalSettings extends GenericSettings
+declare extern type GlobalSettings extends GenericSettings with
     Lua: LuaSettings
     Game: GameSettings
     Studio: Studio
@@ -669,7 +690,7 @@ ApiParameter = TypedDict(
 )
 
 ApiPropertySecurityLevel = TypedDict(
-    "ApiPropertySecurityLevel", 
+    "ApiPropertySecurityLevel",
     {
         "Read": ApiSecurityLevel,
         "Write": ApiSecurityLevel
@@ -789,19 +810,43 @@ assert (
 # Cache for looking up members by name when resolving deprecations
 classesWithMemberName: dict[str, List[ApiClass]] = {}
 
-# Keep track of declared Luau types as a failsafe if we need to declare them.
-# This needs to be kept in-sync with any Luau type declarations
-# added in EXTRA_MEMBERS
-
-declaredLuauTypes: Set[str] = {
+# Types referenced in the API dump / EXTRA_MEMBERS / Corrections that we need to track for auto-declaration.
+# Seeded with types from EXTRA_MEMBERS that bypass resolveType().
+referenced_types: Set[str] = {
     "ReviewableContentEvent",
     "AutoSetupParams",
     "CaptureParams",
     "VideoSample",
 }
 
+LUAU_PRIMITIVES = {"string", "number", "boolean", "nil", "any", "unknown", "never", "buffer", "thread", "vector"}
+
+# All types that are defined (populated incrementally during generation).
+# Seeded with static sources; classes, datatypes, and enums are added during printing.
+def extractDefinedNames(text: str) -> Set[str]:
+    """Extract type/class/declare names from Luau definition text."""
+    names: Set[str] = set()
+    for m in re.finditer(r'(?:export\s+)?type\s+(\w+)', text):
+        names.add(m.group(1))
+    for m in re.finditer(r'declare\s+class\s+(\w+)', text):
+        names.add(m.group(1))
+    for m in re.finditer(r'declare\s+(\w+)\s*:', text):
+        names.add(m.group(1))
+    return names
+
+def _seed_defined_types() -> Set[str]:
+    types: Set[str] = set()
+    types.update(LUAU_PRIMITIVES)
+    types.update(TYPE_INDEX.values())
+    types.update(IGNORED_INSTANCES)
+    for base in [START_BASE, POST_DATATYPES_BASE, END_BASE]:
+        types.update(extractDefinedNames(base))
+    return types
+
+defined_types: Set[str] = _seed_defined_types()
+
 def isIdentifier(name: str):
-    return re.match(r"^[a-zA-Z_]+[a-zA-Z_0-9]*$", name)  # TODO: 'function'
+    return re.match(r"^[A-Za-z_]\w*$", name)
 
 def escapeName(name: str):
     """Escape a name string to be property-compatible"""
@@ -846,11 +891,21 @@ def resolveType(type: Union[ApiValueType, CorrectionsValueType]) -> str:
     if category == "Enum":
         return "Enum" + name
     else:
-        return TYPE_INDEX[name] if name in TYPE_INDEX else name
+        resolved = TYPE_INDEX[name] if name in TYPE_INDEX else name
+        if resolved not in LUAU_PRIMITIVES and isIdentifier(resolved):
+            referenced_types.add(resolved)
+        return resolved
 
 
 def resolveParameter(param: ApiParameter):
     paramType = resolveType(param["Type"])
+
+    if paramType == "User":
+        # HACK: The User type is a special case where we only want to
+        # union it with number when its a parameter, so we
+        # don't use TYPE_INDEX to handle this case.
+        paramType = "(User | number)"
+
     isOptional = paramType[-1] == "?"
     isVariadic = paramType.startswith("...")
     if isVariadic:
@@ -875,15 +930,15 @@ def resolveReturnType(member: Union[ApiFunction, ApiCallback]) -> str:
         return "(" + ", ".join(types) + ")"
     elif member["ReturnType"] is not None:
         return resolveType(member["ReturnType"])
-    
+
     return "nil"
 
 def resolveDeprecation(member: ApiMember, klass: ApiClass | DataType) -> str:
     tags: Optional[List[Union[str, ApiDeprecatedInfo]]] = None
-    
+
     if "Tags" in member:
         tags = member["Tags"]
-    
+
     result = ""
 
     if tags is not None:
@@ -916,7 +971,7 @@ def resolveDeprecation(member: ApiMember, klass: ApiClass | DataType) -> str:
                             if member["Name"] == preferred:
                                 bestMember = member
                                 break
-                        
+
                         if bestMember is not None:
                             # Use the classname and member name, we found a different class to point to!
                             result = f"@[deprecated {{use = \"{bestClass['Name']}{':' if bestMember['MemberType'] == 'Function' else '.'}{preferred}\"}}]\n\t\t"
@@ -952,15 +1007,15 @@ def filterMember(klassName: str, member: ApiMember):
         and member["MemberType"] != "Function"
     ):
         return False
-    
+
     if ("Tags" in member and
         member["Tags"] is not None
         and "NotScriptable" in member["Tags"]):
         return False
-    
+
     if member["Name"] in classIgnoredMembers(klassName):
         return False
-    
+
 
     if "Security" in member:
         if isinstance(member["Security"], str):
@@ -982,27 +1037,49 @@ def declareClass(klass: Union[ApiClass, DataType]) -> str:
     if klass["Name"] in IGNORED_INSTANCES:
         return ""
 
-    out = "declare class " + klass["Name"]
+    out = "declare extern type " + klass["Name"]
     if "Superclass" in klass and klass["Superclass"] != "<<<ROOT>>>":
         out += " extends " + klass["Superclass"]
-    out += "\n"
+    out += " with\n"
 
     def declareMember(member: ApiMember):
         if member["MemberType"] == "Property":
-            return (
-                f"\t{escapeName(member['Name'])}: {resolveType(member['ValueType'])}\n"
-            )
-        elif member["MemberType"] == "Function":
-            return f"\t{resolveDeprecation(member, klass)}function {escapeName(member['Name'])}(self{', ' if len(member['Parameters']) > 0 else ''}{resolveParameterList(member['Parameters'])}): {resolveReturnType(member)}\n"
-        elif member["MemberType"] == "Event":
-            parameters = ", ".join(
-                map(lambda x: resolveType(x["Type"]), member["Parameters"])
-            )
-            return f"\t{escapeName(member['Name'])}: RBXScriptSignal<{parameters}>\n"
-        elif member["MemberType"] == "Callback":
-            return f"\t{escapeName(member['Name'])}: ({resolveParameterList(member['Parameters'])}) -> {resolveReturnType(member)}\n"
+            return f"\t{escapeName(member['Name'])}: {resolveType(member['ValueType'])}\n"
         else:
-            assert False, "Unhandled member type: " + member["MemberType"]
+            # only one pack allowed, normalize all but the last to 'any'
+            types = [resolveType(param["Type"]) for param in member["Parameters"]]
+            packIndices = [i for i, t in enumerate(types) if t.startswith("...")]
+
+            for i in packIndices[:-1]:  
+                types[i] = "any"
+
+            # pack must be the last parameter, otherwise normalize it to 'any'.
+            packIndex = next((i for i, t in enumerate(types) if t.startswith("...")), -1)
+
+            if packIndex >= 0 and packIndex != len(types) - 1:
+                types[packIndex] = "any"
+
+            if member["MemberType"] == "Event":
+                typeList = ", ".join(types)
+                typeList = f"({typeList})" if len(types) != 1 else typeList
+                return f"\t{escapeName(member['Name'])}: RBXScriptSignal<{typeList}>\n"
+            else:
+                types = [param["Type"] for param in member["Parameters"]]
+                tuples = [ty for i, ty in enumerate(types) if types[i] == "any"]
+                
+                # Normalize 'any' types to their C++ 'Variant' type.
+                for i, tuple in enumerate(tuples):
+                    tuple["Category"] = "Group"
+                    tuple["Name"] = "Variant"
+                
+                params = resolveParameterList(member["Parameters"])
+                
+                if member["MemberType"] == "Function":
+                    return f"\t{resolveDeprecation(member, klass)}function {escapeName(member['Name'])}(self{', ' if len(member['Parameters']) > 0 else ''}{params}): {resolveReturnType(member)}\n"
+                elif member["MemberType"] == "Callback":
+                    return f"\t{escapeName(member['Name'])}: ({params}) -> {resolveReturnType(member)}\n"
+                else:
+                    assert False, "Unhandled member type: " + member["MemberType"]
 
     memberDefinitions = [
         declareMember(m) for m in klass["Members"] if filterMember(klass["Name"], m)
@@ -1030,8 +1107,8 @@ def printEnums(dump: ApiDump):
     out = ""
     for enum, items in enums.items():
         # Declare an atom for the enum
-        out += f"declare class Enum{enum} extends EnumItem end\n"
-        out += f"declare class Enum{enum}_INTERNAL extends Enum\n"
+        out += f"declare extern type Enum{enum} extends EnumItem with end\n"
+        out += f"declare extern type Enum{enum}_INTERNAL extends Enum with\n"
         items.sort()
         for item in items:
             out += f"\t{escapeName(item)}: Enum{enum}\n"
@@ -1128,6 +1205,56 @@ def printDataTypeConstructors(types: DataTypesDump):
         print()
 
 
+def printUndefinedTypeStubs():
+    undefined = sorted(referenced_types - defined_types)
+    if undefined:
+        for name in undefined:
+            print(f"type {name} = any")
+        print()
+
+
+def prescanAndSeedTypes(dump: ApiDump, dataTypes: DataTypesDump):
+    """Pre-populate referenced_types and defined_types before any output is generated.
+
+    This ensures that printUndefinedTypeStubs() can be called early (before class
+    declarations) so that type stubs appear before the classes that reference them.
+    Luau processes declaration files in order, so stubs must precede their usages.
+    """
+    # Pre-seed defined_types with all names that will be defined during generation,
+    # so that printUndefinedTypeStubs() doesn't emit stubs for those.
+    for klass in dump["Classes"]:
+        if klass["Name"] not in IGNORED_INSTANCES:
+            defined_types.add(klass["Name"])
+    for klass in dataTypes["DataTypes"]:
+        if klass["Name"] not in IGNORED_INSTANCES:
+            defined_types.add(klass["Name"])
+    for klass in dataTypes["Constructors"]:
+        defined_types.add(klass["Name"])
+    for enum in dump["Enums"]:
+        defined_types.add("Enum" + enum["Name"])
+
+    # Pre-scan all member types to populate referenced_types.
+    for klass in chain(dataTypes["DataTypes"], dump["Classes"]):
+        if klass.get("Name") in IGNORED_INSTANCES:
+            continue
+        for member in klass["Members"]:
+            if member["MemberType"] == "Property" and "ValueType" in member:
+                resolveType(member["ValueType"])
+            elif member["MemberType"] in ("Function", "Callback"):
+                for param in member.get("Parameters", []):
+                    resolveType(param["Type"])
+                ret = member.get("ReturnType")
+                if ret is not None:
+                    if isinstance(ret, list):
+                        for r in ret:
+                            resolveType(r)
+                    else:
+                        resolveType(ret)
+            elif member["MemberType"] == "Event":
+                for param in member.get("Parameters", []):
+                    resolveType(param["Type"])
+
+
 def applyCorrections(dump: ApiDump, corrections: CorrectionsDump):
     for klass in corrections["Classes"]:
         for otherClass in dump["Classes"]:
@@ -1149,6 +1276,10 @@ def applyCorrections(dump: ApiDump, corrections: CorrectionsDump):
                                     otherMember["ReturnType"]["Generic"] = member[
                                         "ReturnType"
                                     ]["Generic"]
+                                if "Declared" in member["ReturnType"]:
+                                    otherMember["ReturnType"]["Declared"] = member[
+                                        "ReturnType"
+                                    ]["Declared"]
                             elif "ValueType" in member:
                                 otherMember["ValueType"]["Name"] = (
                                     member["ValueType"]["Name"]
@@ -1177,6 +1308,10 @@ def applyCorrections(dump: ApiDump, corrections: CorrectionsDump):
                                                     otherParam["Type"]["Generic"] = (
                                                         param["Type"]["Generic"]
                                                     )
+                                                if "Declared" in param["Type"]:
+                                                    otherParam["Type"]["Declared"] = (
+                                                        param["Type"]["Declared"]
+                                                    )
                                             if "Default" in param:
                                                 otherParam["Default"] = param["Default"]
 
@@ -1195,7 +1330,7 @@ def loadMembersIntoStructures(klass: ApiClass):
             classesWithMemberName[name] = [klass]
         else:
             classesWithMemberName[name].append(klass)
-            
+
 
 def loadClassesIntoStructures(dump: ApiDump):
     for klass in dump["Classes"]:
@@ -1217,14 +1352,14 @@ def loadClassesIntoStructures(dump: ApiDump):
 def registerDeclaredInType(type: CorrectionsValueType | None):
     if type is not None:
         if "Declared" in type and type["Declared"] is not None:
-            if type["Declared"] not in declaredLuauTypes:
+            if type["Declared"] not in referenced_types:
                 declaredType = type["Declared"]
 
                 if declaredType.endswith("?"):
                     declaredType = declaredType[:-1]
 
-                if re.match("^[A-z0-9_]+$", declaredType):
-                    declaredLuauTypes.add(declaredType)
+                if isIdentifier(declaredType):
+                    referenced_types.add(declaredType)
 
 def registerDeclared(dump: CorrectionsDump):
     for klass in dump["Classes"]:
@@ -1232,7 +1367,7 @@ def registerDeclared(dump: CorrectionsDump):
             if "TupleReturns" in member and member["TupleReturns"] is not None:
                 for ret in member["TupleReturns"]:
                     registerDeclaredInType(ret)
-            
+
             if "ReturnType" in member:
                 if isinstance(member["ReturnType"], list):
                     for ret in member["ReturnType"]:
@@ -1244,7 +1379,7 @@ def registerDeclared(dump: CorrectionsDump):
             if "ValueType" in member:
                 value = member["ValueType"]
                 registerDeclaredInType(value)
-            
+
             if "Parameters" in member and member["Parameters"] is not None:
                 for param in member["Parameters"]:
                     if "Type" in param:
@@ -1261,7 +1396,12 @@ def printJsonPrologue():
     print("--#METADATA#" + json.dumps(data, indent=None))
     print()
 
-def printLuauTypes():
+def fetchLuauTypes() -> str:
+    """Fetch, process and return the LuauTypes content as a string (without printing).
+
+    Also updates defined_types with all type/class names found in the content, so that
+    printUndefinedTypeStubs() won't emit stubs for types already defined in LuauTypes.
+    """
     luauTypes: str = requests.get(LUAU_TYPES_URL).text
 
     # Split luauTypes into lines
@@ -1269,7 +1409,7 @@ def printLuauTypes():
 
     while not luauLines[0].startswith("-- SECTION BEGIN:"):
         luauLines.pop(0)
-    
+
     # Begin capturing sections from SECTION BEGIN to SECTION END
     luauSections: dict[str, list[str]] = dict()
     sectionNames: list[str] = []
@@ -1284,12 +1424,12 @@ def printLuauTypes():
             if currentSection is not None:
                 luauSections[sectionName] = currentSection
                 currentSection = None
-            
+
             sectionNames.append(sectionName)
         elif currentSection is not None:
             if line in LUAU_SNIPPET_PATCHES.keys():
                 line = LUAU_SNIPPET_PATCHES[line]
-            
+
             line = line.replace("Enum.", "Enum")
             currentSection.append(line)
 
@@ -1303,28 +1443,20 @@ def printLuauTypes():
 
             for line in sectionLines:
                 writtenLines.add(line)
-            
+
             luauTypes += "\n".join(sectionLines) + "\n"
-    
+
     # Fail-safe: Append any patches that were not written
     for patch in LUAU_SNIPPET_PATCHES.values():
         if patch not in writtenLines:
             luauTypes += patch + "\n"
 
-    # Fail-safe: Declare any missing types that were marked as declared
-    for declaredType in declaredLuauTypes:
-        declaration = f"type {declaredType} = any"
-        found = False
+    # Extract type/class names defined in LuauTypes so that printUndefinedTypeStubs()
+    # won't emit stubs for types that are already properly defined here.
+    defined_types.update(extractDefinedNames(luauTypes))
 
-        for line in writtenLines:
-            if line.find(declaredType) != -1:
-                found = True
-                break
+    return luauTypes
 
-        if not found:
-            luauTypes += declaration + "\n"
-    
-    print(luauTypes)
 
 # Load BrickColors
 brickColors = json.loads(requests.get(BRICK_COLORS_URL).text)
@@ -1342,12 +1474,21 @@ corrections: CorrectionsDump = json.load(CORRECTIONS)
 applyCorrections(dump, corrections)
 registerDeclared(corrections)
 
+# Fetch LuauTypes early so defined_types is seeded with its type names before
+# printUndefinedTypeStubs() runs (avoiding false stubs for types defined in LuauTypes).
+luauTypesContent = fetchLuauTypes()
+
+# Pre-scan all member types and seed defined_types with future definitions so that
+# printUndefinedTypeStubs() can be called early (before class declarations).
+prescanAndSeedTypes(dump, dataTypes)
+
 printJsonPrologue()
 print(START_BASE)
+printUndefinedTypeStubs()
 printEnums(dump)
 printDataTypes(sorted(dataTypes["DataTypes"], key=lambda klass: klass["Name"]), dump)
 print(POST_DATATYPES_BASE)
-printLuauTypes()
+print(luauTypesContent)
 printClasses(dump)
 printDataTypeConstructors(dataTypes)
 print(END_BASE)
