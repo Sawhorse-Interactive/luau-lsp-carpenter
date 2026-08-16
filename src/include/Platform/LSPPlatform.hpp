@@ -1,7 +1,9 @@
 #pragma once
 
 #include "LSP/ClientConfiguration.hpp"
+#include "LSP/SharedRequire.hpp"
 #include "LSP/TextDocument.hpp"
+#include "Platform/StringRequireTypes.hpp"
 #include "Luau/Ast.h"
 #include "Luau/Autocomplete.h"
 #include "Luau/Error.h"
@@ -40,6 +42,11 @@ protected:
     WorkspaceFolder* workspaceFolder;
 
 public:
+    /// Index backing the fork-custom `shared("Name")` string require.
+    /// Populated by WorkspaceFolder::buildSharedRequireIndex and kept current by
+    /// WorkspaceFolder::onDidChangeWatchedFiles.
+    LSP::SharedRequire::Index sharedRequireIndex;
+
     virtual void mutateRegisteredDefinitions(Luau::GlobalTypes& globals, std::optional<nlohmann::json> metadata) {}
 
     virtual void onDidChangeWatchedFiles(const lsp::FileEvent& change) {}
@@ -47,6 +54,13 @@ public:
     virtual void setupWithConfiguration(const ClientConfiguration& config) {}
 
     virtual std::unique_ptr<Luau::RequireSuggester> getRequireSuggester();
+
+    virtual Luau::LanguageServer::AutoImports::ModuleVisitor getAutoImportsModuleVisitor(const Luau::ModuleName& from);
+    virtual std::optional<Luau::LanguageServer::AutoImports::RequirePathComputer> getAutoImportsRequirePathComputer(
+        const Luau::ModuleName& from, ImportRequireStyle style)
+    {
+        return std::nullopt;
+    }
 
     /// The name points to a virtual path (i.e. for Roblox, game/ or ProjectRoot/)
     [[nodiscard]] virtual bool isVirtualPath(const Luau::ModuleName& name) const
@@ -68,7 +82,7 @@ public:
 
     [[nodiscard]] virtual std::optional<std::string> readSourceCode(const Luau::ModuleName& name, const Uri& path) const;
 
-    std::optional<Luau::ModuleInfo> resolveStringRequire(
+    virtual std::optional<Luau::ModuleInfo> resolveStringRequire(
         const Luau::ModuleInfo* context, const std::string& requiredString, const Luau::TypeCheckLimits& limits);
     virtual std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node, const Luau::TypeCheckLimits& limits);
 

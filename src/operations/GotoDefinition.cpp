@@ -2,7 +2,6 @@
 
 #include "Luau/AstQuery.h"
 #include "LSP/LuauExt.hpp"
-#include "Platform/RobloxPlatform.hpp"
 
 #include <algorithm>
 
@@ -24,63 +23,7 @@ static std::optional<LocationInformation> findLocationForSymbol(
     return LocationInformation{Luau::getDefinitionModuleName(*ty), getLocation(*ty), *ty};
 }
 
-// When a generic type alias (e.g. Signal<T...>) is instantiated in a different module,
-// the ConstraintSolver clones the table and overwrites its definitionModuleName with the
-// instantiating module's name. But the property locations still reference the original
-// module where the type was defined. This function detects that case and finds the
-// original module by searching exportedTypeBindings in loaded modules.
-static std::optional<std::string> getDefinitionModuleForType(
-    Luau::TypeId baseTy, const Luau::Frontend& frontend)
-{
-    auto defMod = Luau::getDefinitionModuleName(baseTy);
-
-    if (auto ttv = Luau::get<Luau::TableType>(Luau::follow(baseTy)))
-    {
-        if (ttv->name)
-        {
-            std::optional<std::string> firstMatch;
-            for (const auto& [moduleName, sourceNode] : frontend.sourceNodes)
-            {
-                auto mod = frontend.moduleResolver.getModule(moduleName);
-                if (!mod)
-                    continue;
-                auto it = mod->exportedTypeBindings.find(*ttv->name);
-                if (it == mod->exportedTypeBindings.end())
-                    continue;
-
-                if (!firstMatch)
-                    firstMatch = moduleName;
-
-                // Prefer the module that originally defines the type
-                // A re-exporting module imports another module that also exports the same type name.
-                bool isReExport = false;
-                if (mod->hasModuleScope())
-                {
-                    for (const auto& [importName, importedModuleName] : mod->getModuleScope()->importedModules)
-                    {
-                        auto importedMod = frontend.moduleResolver.getModule(importedModuleName);
-                        if (importedMod && importedMod->exportedTypeBindings.count(*ttv->name))
-                        {
-                            isReExport = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!isReExport)
-                    return moduleName;
-            }
-
-            if (firstMatch)
-                return *firstMatch;
-        }
-    }
-
-    return defMod;
-}
-
-static std::vector<LocationInformation> findLocationsForIndex(
-    const Luau::ModulePtr& module, const Luau::AstExpr* base, const Luau::Name& name, const Luau::Frontend& frontend)
+static std::vector<LocationInformation> findLocationsForIndex(const Luau::ModulePtr& module, const Luau::AstExpr* base, const Luau::Name& name)
 {
     auto baseTy = module->astTypes.find(base);
     if (!baseTy)
@@ -102,19 +45,13 @@ static std::vector<LocationInformation> findLocationsForIndex(
                 return existing.location == location;
             });
         if (!isDuplicate)
-        {
-            auto defModuleName = !prop.location && prop.typeLocation
-                ? getDefinitionModuleForType(realBaseTy, frontend)
-                : Luau::getDefinitionModuleName(realBaseTy);
-            results.push_back(LocationInformation{defModuleName, location, *prop.readTy});
-        }
+            results.push_back(LocationInformation{Luau::getDefinitionModuleName(realBaseTy), location, *prop.readTy});
     }
 
     return results;
 }
 
-static std::vector<LocationInformation> findLocationsForExpr(
-    const Luau::ModulePtr& module, const Luau::AstExpr* expr, const Luau::Position& position, const Luau::Frontend& frontend)
+static std::vector<LocationInformation> findLocationsForExpr(const Luau::ModulePtr& module, const Luau::AstExpr* expr, const Luau::Position& position)
 {
     if (auto local = expr->as<Luau::AstExprLocal>())
     {
@@ -127,11 +64,11 @@ static std::vector<LocationInformation> findLocationsForExpr(
             return {*loc};
     }
     else if (auto indexname = expr->as<Luau::AstExprIndexName>())
-        return findLocationsForIndex(module, indexname->expr, indexname->index.value, frontend);
+        return findLocationsForIndex(module, indexname->expr, indexname->index.value);
     else if (auto indexexpr = expr->as<Luau::AstExprIndexExpr>())
     {
         if (auto string = indexexpr->index->as<Luau::AstExprConstantString>())
-            return findLocationsForIndex(module, indexexpr->expr, std::string(string->value.data, string->value.size), frontend);
+            return findLocationsForIndex(module, indexexpr->expr, std::string(string->value.data, string->value.size));
     }
 
     return {};
@@ -189,7 +126,7 @@ lsp::DefinitionResult WorkspaceFolder::gotoDefinition(const lsp::DefinitionParam
 
     if (auto expr = node->asExpr())
     {
-        for (const auto& [definitionModuleName, location, _] : findLocationsForExpr(module, expr, position, frontend))
+        for (const auto& [definitionModuleName, location, _] : findLocationsForExpr(module, expr, position))
         {
             if (location)
             {
@@ -265,26 +202,6 @@ lsp::DefinitionResult WorkspaceFolder::gotoDefinition(const lsp::DefinitionParam
                     if (auto uri = platform->resolveToRealPath(moduleInfo->name))
                     {
                         result.emplace_back(lsp::Location{*uri, lsp::Range{{0, 0}, {0, 0}}});
-                    }
-                }
-            }
-
-            // Also handle shared("FileName") calls
-            if (auto call = ancestry[ancestry.size() - 2]->as<Luau::AstExprCall>(); call && types::matchShared(*call))
-            {
-                if (auto* str = call->args.data[0]->as<Luau::AstExprConstantString>())
-                {
-                    std::string fileName(str->value.data, str->value.size);
-                    if (auto* robloxPlatform = dynamic_cast<RobloxPlatform*>(platform.get()))
-                    {
-                        auto sharedResult = robloxPlatform->resolveSharedModuleName(fileName);
-                        if (sharedResult.status == SharedModuleResult::Found)
-                        {
-                            if (auto uri = platform->resolveToRealPath(sharedResult.moduleName))
-                            {
-                                result.emplace_back(lsp::Location{*uri, lsp::Range{{0, 0}, {0, 0}}});
-                            }
-                        }
                     }
                 }
             }

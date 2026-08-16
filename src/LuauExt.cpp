@@ -6,6 +6,7 @@
 #include "Luau/BuiltinDefinitions.h"
 #include "Luau/ToString.h"
 #include "Luau/PrettyPrinter.h"
+#include "Luau/RequireLikeGlobals.h"
 #include "Luau/TypeInfer.h"
 #include "LSP/LuauExt.hpp"
 #include "LSP/Utils.hpp"
@@ -159,31 +160,16 @@ Luau::ToStringResult toStringReturnTypeDetailed(Luau::TypePackId retTypes, Luau:
     return result;
 }
 
-// Duplicated from Luau/TypeInfer.h, since its static
+// Duplicated from Luau/TypeInfer.h, since its static.
+// Shares its notion of "require-like" with the luau fork so that operations built on this
+// (go to definition, document links) treat shared("Name") exactly as they treat require().
 std::optional<Luau::AstExpr*> matchRequire(const Luau::AstExprCall& call)
 {
-    const char* require = "require";
-
     if (call.args.size != 1)
         return std::nullopt;
 
     const Luau::AstExprGlobal* funcAsGlobal = call.func->as<Luau::AstExprGlobal>();
-    if (!funcAsGlobal || funcAsGlobal->name != require)
-        return std::nullopt;
-
-    if (call.args.size != 1)
-        return std::nullopt;
-
-    return call.args.data[0];
-}
-
-std::optional<Luau::AstExpr*> matchShared(const Luau::AstExprCall& call)
-{
-    if (call.args.size < 1)
-        return std::nullopt;
-
-    const Luau::AstExprGlobal* funcAsGlobal = call.func->as<Luau::AstExprGlobal>();
-    if (!funcAsGlobal || funcAsGlobal->name != "shared")
+    if (!funcAsGlobal || !Luau::isRequireLikeGlobal(funcAsGlobal->name))
         return std::nullopt;
 
     return call.args.data[0];

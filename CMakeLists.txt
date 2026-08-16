@@ -11,57 +11,32 @@ set(LSP_VERSION "0.1.17")
 set(LSP_NAME "Luau")
 
 if (LSP_STATIC_CRT)
-    cmake_policy(SET CMP0091 NEW)
     set(LUAU_STATIC_CRT ON)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif ()
 
 if (LUAU_ENABLE_TIME_TRACE)
-    add_definitions(-DLUAU_ENABLE_TIME_TRACE)
-endif ()
-
-if (LSP_BUILD_WITH_SENTRY)
-    add_definitions(-DLSP_BUILD_WITH_SENTRY)
+    add_compile_definitions(LUAU_ENABLE_TIME_TRACE)
 endif ()
 
 project(Luau.LanguageServer LANGUAGES CXX)
 
 # Sentry setup
 if (LSP_BUILD_WITH_SENTRY)
-    add_subdirectory(extern/sentry-native)
-    set(BUILD_SHARED_LIBS OFF)
-    set(SENTRY_BUILD_RUNTIMESTATIC ON)
-    set(CRASHPAD_ENABLE_STACKTRACE ON)
-endif ()
-
-# Apply patches to the Luau submodule at configure time (before sources are parsed)
-file(GLOB LUAU_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/luau-*.patch")
-foreach(PATCH_FILE ${LUAU_PATCHES})
-    # Check if patch is already applied (reverse-apply succeeds = already applied)
-    execute_process(
-        COMMAND git apply --reverse --check "${PATCH_FILE}"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/luau"
-        RESULT_VARIABLE PATCH_ALREADY_APPLIED
-        OUTPUT_QUIET
-        ERROR_QUIET
+    include(FetchContent)
+    set(SENTRY_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(SENTRY_BACKEND "crashpad" CACHE STRING "" FORCE)
+    set(SENTRY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(SENTRY_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SENTRY_BUILD_RUNTIMESTATIC ${LSP_STATIC_CRT} CACHE BOOL "" FORCE)
+    set(SENTRY_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    set(CRASHPAD_ENABLE_STACKTRACE ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(sentry
+        URL https://github.com/getsentry/sentry-native/releases/download/0.11.0/sentry-native.zip
+        URL_HASH SHA256=2946d5d13ef2aa791fc4cee3663658da78ad8b3260f6976e1fd8f6e237c14db0
     )
-    if(PATCH_ALREADY_APPLIED)
-        # Not yet applied — apply it now
-        execute_process(
-            COMMAND git apply "${PATCH_FILE}"
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/luau"
-            RESULT_VARIABLE PATCH_RESULT
-            ERROR_VARIABLE PATCH_ERROR
-        )
-        if(PATCH_RESULT)
-            message(FATAL_ERROR "Failed to apply Luau patch ${PATCH_FILE}:\n${PATCH_ERROR}")
-        else()
-            message(STATUS "Applied Luau patch: ${PATCH_FILE}")
-        endif()
-    else()
-        message(STATUS "Luau patch already applied: ${PATCH_FILE}")
-    endif()
-endforeach()
+    FetchContent_MakeAvailable(sentry)
+endif ()
 
 add_subdirectory(luau)
 add_library(Luau.LanguageServer STATIC)
@@ -79,6 +54,7 @@ target_sources(Luau.LanguageServer PRIVATE
         src/DocumentationParser.cpp
         src/LuauExt.cpp
         src/LuauFileUtils.cpp
+        src/SharedRequire.cpp
         src/IostreamHelpers.cpp
         src/Utils.cpp
         src/Flags.cpp
@@ -97,6 +73,7 @@ target_sources(Luau.LanguageServer PRIVATE
         src/platform/roblox/RobloxLanguageServer.cpp
         src/platform/roblox/RobloxLuauExt.cpp
         src/platform/roblox/RobloxSourcemap.cpp
+        src/platform/roblox/RobloxStringRequireSuggester.cpp
         src/platform/roblox/RobloxSourceNode.cpp
         src/platform/roblox/RobloxStudioPlugin.cpp
         src/operations/Diagnostics.cpp
@@ -112,6 +89,7 @@ target_sources(Luau.LanguageServer PRIVATE
         src/operations/InlayHints.cpp
         src/operations/SemanticTokens.cpp
         src/operations/CodeAction.cpp
+        src/operations/Refactoring.cpp
         src/operations/WorkspaceSymbol.cpp
         src/operations/FoldingRange.cpp
         src/operations/CallHierarchy.cpp
@@ -120,6 +98,12 @@ target_sources(Luau.LanguageServer PRIVATE
         src/operations/OnTypeFormatting.cpp
         src/transport/PipeTransport.cpp
         src/transport/StdioTransport.cpp
+        src/Plugin/SourceMapping.cpp
+        src/Plugin/PluginTextDocument.cpp
+        src/Plugin/PluginRuntime.cpp
+        src/Plugin/PluginManager.cpp
+        src/Plugin/PluginLuaApi.cpp
+        src/Plugin/PluginDefinitions.cpp
         extern/glob/match.cpp
 )
 
@@ -137,7 +121,7 @@ target_sources(Luau.LanguageServer.Test PRIVATE
         tests/AutoImports.test.cpp
         tests/Bytecode.test.cpp
         tests/MagicFunctions.test.cpp
-        tests/Shared.test.cpp
+        tests/SharedRequire.test.cpp
         tests/Documentation.test.cpp
         tests/TextDocument.test.cpp
         tests/Uri.test.cpp
@@ -160,16 +144,19 @@ target_sources(Luau.LanguageServer.Test PRIVATE
         tests/GoToDefinition.test.cpp
         tests/Glob.test.cpp
         tests/Workspace.test.cpp
+        tests/WorkspaceSymbol.test.cpp
         tests/RequireGraph.test.cpp
         tests/OnTypeFormatting.test.cpp
         tests/AnalyzeCli.test.cpp
         tests/CodeAction.test.cpp
+        tests/Plugin.test.cpp
+        tests/Refactoring.test.cpp
         src/AnalyzeCli.cpp # For testing
 )
 
 # TODO: Set Luau.Analysis at O2 to speed up debugging
 if (MSVC)
-    list(APPEND LUAU_LSP_OPTIONS /W3 /D_CRT_SECURE_NO_WARNINGS)
+    list(APPEND LUAU_LSP_OPTIONS /W3 /D_CRT_SECURE_NO_WARNINGS /bigobj)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         list(APPEND LUAU_LSP_OPTIONS "/EHsc") # The CMake clang-cl target doesn't enable exceptions by default
     else ()
@@ -189,33 +176,22 @@ endif ()
 
 if (LSP_BUILD_ASAN)
     if (MSVC)
-        list(APPEND LUAU_LSP_OPTIONS /fsanitize=address)
-        target_compile_options(Luau.Ast PRIVATE /fsanitize=address)
-        target_compile_options(Luau.Analysis PRIVATE /fsanitize=address)
-        target_compile_options(Luau.Compiler PRIVATE /fsanitize=address)
-        target_compile_options(Luau.Config PRIVATE /fsanitize=address)
-        target_compile_options(Luau.VM PRIVATE /fsanitize=address)
-        target_compile_options(Luau.CodeGen PRIVATE /fsanitize=address)
-        target_compile_options(Luau.Common PRIVATE /fsanitize=address)
+        set(ASAN_FLAG /fsanitize=address)
     else ()
-        list(APPEND LUAU_LSP_OPTIONS -fsanitize=address)
-        target_compile_options(Luau.Ast PRIVATE -fsanitize=address)
-        target_compile_options(Luau.Analysis PRIVATE -fsanitize=address)
-        target_compile_options(Luau.Compiler PRIVATE -fsanitize=address)
-        target_compile_options(Luau.Config PRIVATE -fsanitize=address)
-        target_compile_options(Luau.VM PRIVATE -fsanitize=address)
-        target_compile_options(Luau.CodeGen PRIVATE -fsanitize=address)
-        target_compile_options(Luau.Common PRIVATE -fsanitize=address)
-        target_link_options(Luau.LanguageServer PRIVATE -fsanitize=address)
-        target_link_options(Luau.LanguageServer.CLI PRIVATE -fsanitize=address)
-        target_link_options(Luau.LanguageServer.Test PRIVATE -fsanitize=address)
-        target_link_options(Luau.Ast PRIVATE -fsanitize=address)
-        target_link_options(Luau.Analysis PRIVATE -fsanitize=address)
-        target_link_options(Luau.Compiler PRIVATE -fsanitize=address)
-        target_link_options(Luau.Config PRIVATE -fsanitize=address)
-        target_link_options(Luau.VM PRIVATE -fsanitize=address)
-        target_link_options(Luau.CodeGen PRIVATE -fsanitize=address)
-        target_link_options(Luau.Common PRIVATE -fsanitize=address)
+        set(ASAN_FLAG -fsanitize=address)
+    endif ()
+
+    list(APPEND LUAU_LSP_OPTIONS ${ASAN_FLAG})
+
+    set(LUAU_ASAN_TARGETS Luau.Ast Luau.Analysis Luau.Compiler Luau.Config Luau.VM Luau.CodeGen Luau.Common)
+    foreach (TARGET_NAME IN LISTS LUAU_ASAN_TARGETS)
+        target_compile_options(${TARGET_NAME} PRIVATE ${ASAN_FLAG})
+    endforeach ()
+
+    if (NOT MSVC)
+        foreach (TARGET_NAME IN LISTS LUAU_ASAN_TARGETS ITEMS Luau.LanguageServer Luau.LanguageServer.CLI Luau.LanguageServer.Test)
+            target_link_options(${TARGET_NAME} PRIVATE ${ASAN_FLAG})
+        endforeach ()
     endif ()
 endif ()
 
@@ -223,20 +199,21 @@ set(EXTERN_INCLUDES extern/json/include extern/glob/include extern/argparse/incl
 
 target_compile_features(Luau.LanguageServer PUBLIC cxx_std_17)
 target_compile_options(Luau.LanguageServer PRIVATE ${LUAU_LSP_OPTIONS})
-target_compile_definitions(Luau.LanguageServer PUBLIC -DLSP_VERSION="${LSP_VERSION}")
-target_compile_definitions(Luau.LanguageServer PUBLIC -DLSP_NAME="${LSP_NAME}")
+target_compile_definitions(Luau.LanguageServer PUBLIC
+    LSP_VERSION="${LSP_VERSION}"
+    LSP_NAME="${LSP_NAME}"
+    $<$<BOOL:${LSP_BUILD_WITH_SENTRY}>:LSP_BUILD_WITH_SENTRY>
+)
 target_include_directories(Luau.LanguageServer PUBLIC src/include)
 target_include_directories(Luau.LanguageServer SYSTEM PUBLIC ${EXTERN_INCLUDES})
 target_link_libraries(Luau.LanguageServer PRIVATE Luau.Ast Luau.Analysis Luau.Compiler Luau.VM Luau.CodeGen)
 
 set_target_properties(Luau.LanguageServer.CLI PROPERTIES OUTPUT_NAME luau-lsp)
-target_compile_features(Luau.LanguageServer.CLI PUBLIC cxx_std_17)
 target_compile_options(Luau.LanguageServer.CLI PRIVATE ${LUAU_LSP_OPTIONS})
 target_include_directories(Luau.LanguageServer.CLI PRIVATE src/include)
 target_include_directories(Luau.LanguageServer.CLI SYSTEM PRIVATE ${EXTERN_INCLUDES})
 target_link_libraries(Luau.LanguageServer.CLI PRIVATE Luau.LanguageServer Luau.Analysis)
 
-target_compile_features(Luau.LanguageServer.Test PRIVATE cxx_std_17)
 target_compile_options(Luau.LanguageServer.Test PRIVATE ${LUAU_LSP_OPTIONS})
 target_include_directories(Luau.LanguageServer.Test PRIVATE tests)
 target_include_directories(Luau.LanguageServer.Test SYSTEM PRIVATE ${EXTERN_INCLUDES} extern/doctest)

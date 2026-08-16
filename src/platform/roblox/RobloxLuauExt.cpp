@@ -3,15 +3,8 @@
 #include "Luau/BuiltinDefinitions.h"
 #include "Luau/ConstraintSolver.h"
 #include "Luau/TypeInfer.h"
-#include "LSP/Workspace.hpp"
-#include "LSP/WorkspaceFileResolver.hpp"
-#include "LSP/Utils.hpp"
-#include "LuauFileUtils.hpp"
 
-#include <algorithm>
-#include <cctype>
-
-LUAU_FASTFLAG(LuauSolverV2)
+LUAU_FASTFLAG(LuauCyclicRequireTypeInference)
 
 // Parse class names from QueryDescendants CSS-like selector strings.
 // Returns the class name from the last compound selector of each comma-separated group.
@@ -127,7 +120,7 @@ std::optional<Luau::WithPredicate<Luau::TypePackId>> MagicInstanceIsA::handleOld
 
     auto type = Luau::follow(tfun->type);
 
-    Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
+    Luau::TypeArena& arena = *typeChecker.currentModule->internalTypes;
     Luau::TypePackId booleanPack = arena.addTypePack({typeChecker.booleanType});
     return Luau::WithPredicate<Luau::TypePackId>{booleanPack, {Luau::IsAPredicate{std::move(*lvalue), expr.location, type}}};
 }
@@ -145,8 +138,14 @@ bool MagicInstanceIsA::infer(const Luau::MagicFunctionCallContext& context)
     std::string className(str->value.data, str->value.size);
     std::optional<Luau::TypeFun> tfun = context.solver->rootScope->lookupType(className);
     if (!tfun)
-        context.solver->reportError(
-            Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}});
+    {
+        if (FFlag::LuauCyclicRequireTypeInference)
+            context.solver->reportError(
+                Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, context.callSite->args.data[0]->location, *context.constraint->moduleName);
+        else
+            context.solver->DEPRECATED_reportError(
+                Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}});
+    }
 
     return false;
 }
@@ -189,7 +188,7 @@ std::optional<Luau::WithPredicate<Luau::TypePackId>> MagicInstanceClone::handleO
     if (!index)
         return std::nullopt;
 
-    Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
+    Luau::TypeArena& arena = *typeChecker.currentModule->internalTypes;
     auto instanceType = typeChecker.checkExpr(scope, *index->expr);
     return Luau::WithPredicate<Luau::TypePackId>{arena.addTypePack({instanceType.type})};
 }
@@ -223,7 +222,7 @@ std::optional<Luau::WithPredicate<Luau::TypePackId>> MagicInstanceFromExisting::
     if (expr.args.size < 1)
         return std::nullopt;
 
-    Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
+    Luau::TypeArena& arena = *typeChecker.currentModule->internalTypes;
     auto instanceType = typeChecker.checkExpr(scope, *expr.args.data[0]);
     return Luau::WithPredicate<Luau::TypePackId>{arena.addTypePack({instanceType.type})};
 }
@@ -271,7 +270,7 @@ std::optional<Luau::WithPredicate<Luau::TypePackId>> MagicInstanceFindFirstXWhic
 
     auto type = Luau::follow(tfun->type);
 
-    Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
+    Luau::TypeArena& arena = *typeChecker.currentModule->internalTypes;
     Luau::TypeId nillableClass = Luau::makeOption(typeChecker.builtinTypes, arena, type);
     return Luau::WithPredicate<Luau::TypePackId>{arena.addTypePack({nillableClass})};
 }
@@ -289,7 +288,10 @@ bool MagicInstanceFindFirstXWhichIsA::infer(const Luau::MagicFunctionCallContext
     std::optional<Luau::TypeFun> tfun = context.solver->rootScope->lookupType(className);
     if (!tfun || !tfun->typeParams.empty() || !tfun->typePackParams.empty())
     {
-        context.solver->reportError(Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, str->location);
+        if (FFlag::LuauCyclicRequireTypeInference)
+            context.solver->reportError(Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, str->location, *context.constraint->moduleName);
+        else
+            context.solver->DEPRECATED_reportError(Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, str->location);
         return false;
     }
 
@@ -335,7 +337,7 @@ std::optional<Luau::WithPredicate<Luau::TypePackId>> MagicEnumItemIsA::handleOld
 
     auto type = Luau::follow(tfun->type);
 
-    Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
+    Luau::TypeArena& arena = *typeChecker.currentModule->internalTypes;
     Luau::TypePackId booleanPack = arena.addTypePack({typeChecker.booleanType});
     return Luau::WithPredicate<Luau::TypePackId>{booleanPack, {Luau::IsAPredicate{std::move(*lvalue), expr.location, type}}};
 }
@@ -353,8 +355,14 @@ bool MagicEnumItemIsA::infer(const Luau::MagicFunctionCallContext& context)
     std::string enumItem(str->value.data, str->value.size);
     std::optional<Luau::TypeFun> tfun = context.constraint->scope->lookupImportedType("Enum", enumItem);
     if (!tfun)
-        context.solver->reportError(
-            Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownSymbol{enumItem, Luau::UnknownSymbol::Type}});
+    {
+        if (FFlag::LuauCyclicRequireTypeInference)
+            context.solver->reportError(
+                Luau::UnknownSymbol{enumItem, Luau::UnknownSymbol::Type}, context.callSite->args.data[0]->location, *context.constraint->moduleName);
+        else
+            context.solver->DEPRECATED_reportError(
+                Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownSymbol{enumItem, Luau::UnknownSymbol::Type}});
+    }
 
     return false;
 }
@@ -442,7 +450,11 @@ bool MagicInstancePropertyCheck::infer(const Luau::MagicFunctionCallContext& con
     std::string property(str->value.data, str->value.size);
     if (!Luau::lookupExternTypeProp(ctv, property))
     {
-        context.solver->reportError(Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownProperty{*selfTy, property}});
+        if (FFlag::LuauCyclicRequireTypeInference)
+            context.solver->reportError(
+                Luau::UnknownProperty{*selfTy, property}, context.callSite->args.data[0]->location, *context.constraint->moduleName);
+        else
+            context.solver->DEPRECATED_reportError(Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownProperty{*selfTy, property}});
     }
 
     return false;
@@ -485,7 +497,7 @@ std::optional<Luau::WithPredicate<Luau::TypePackId>> MagicQueryDescendants::hand
         classTypes.push_back(Luau::follow(tfun->type));
     }
 
-    Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
+    Luau::TypeArena& arena = *typeChecker.currentModule->internalTypes;
 
     Luau::TypeId elementType;
     if (classTypes.size() == 1)
@@ -522,7 +534,10 @@ bool MagicQueryDescendants::infer(const Luau::MagicFunctionCallContext& context)
         std::optional<Luau::TypeFun> tfun = context.solver->rootScope->lookupType(className);
         if (!tfun || !tfun->typeParams.empty() || !tfun->typePackParams.empty())
         {
-            context.solver->reportError(Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, str->location);
+            if (FFlag::LuauCyclicRequireTypeInference)
+                context.solver->reportError(Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, str->location, *context.constraint->moduleName);
+            else
+                context.solver->DEPRECATED_reportError(Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, str->location);
             return false;
         }
         classTypes.push_back(Luau::follow(tfun->type));
@@ -602,7 +617,7 @@ std::optional<Luau::WithPredicate<Luau::TypePackId>> MagicTypeLookup::handleOldS
 
             auto type = Luau::follow(tfun->type);
 
-            Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
+            Luau::TypeArena& arena = *typeChecker.currentModule->internalTypes;
             Luau::TypePackId classTypePack = arena.addTypePack({type});
             return Luau::WithPredicate<Luau::TypePackId>{classTypePack};
         }
@@ -628,8 +643,12 @@ bool MagicTypeLookup::infer(const Luau::MagicFunctionCallContext& context)
             std::optional<Luau::TypeFun> tfun = context.solver->rootScope->lookupType(className);
             if (!tfun || !tfun->typeParams.empty() || !tfun->typePackParams.empty())
             {
-                context.solver->reportError(
-                    Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}});
+                if (FFlag::LuauCyclicRequireTypeInference)
+                    context.solver->reportError(Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}, context.callSite->args.data[0]->location,
+                        *context.constraint->moduleName);
+                else
+                    context.solver->DEPRECATED_reportError(
+                        Luau::TypeError{context.callSite->args.data[0]->location, Luau::UnknownSymbol{className, Luau::UnknownSymbol::Type}});
                 return false;
             }
 
@@ -640,8 +659,12 @@ bool MagicTypeLookup::infer(const Luau::MagicFunctionCallContext& context)
         }
         else
         {
-            context.solver->reportError(
-                Luau::TypeError{context.callSite->args.data[0]->location, Luau::GenericError{errorMessagePrefix + " '" + className + "'"}});
+            if (FFlag::LuauCyclicRequireTypeInference)
+                context.solver->reportError(Luau::GenericError{errorMessagePrefix + " '" + className + "'"},
+                    context.callSite->args.data[0]->location, *context.constraint->moduleName);
+            else
+                context.solver->DEPRECATED_reportError(
+                    Luau::TypeError{context.callSite->args.data[0]->location, Luau::GenericError{errorMessagePrefix + " '" + className + "'"}});
         }
     }
 
@@ -666,97 +689,6 @@ static void attachTagSafe(Luau::TableType::Props& props, const char* property, c
         Luau::attachTag(*prop->second.readTy, tagName);
     }
 }
-
-// ---- MagicShared: resolves shared("FileName") to module types ----
-
-struct MagicShared final : Luau::MagicFunction
-{
-    RobloxPlatform* platform;
-
-    explicit MagicShared(RobloxPlatform* platform)
-        : platform(platform)
-    {
-    }
-
-    std::optional<Luau::WithPredicate<Luau::TypePackId>> handleOldSolver(
-        struct Luau::TypeChecker& typeChecker,
-        const std::shared_ptr<struct Luau::Scope>& scope,
-        const class Luau::AstExprCall& expr,
-        Luau::WithPredicate<Luau::TypePackId> withPredicate) override
-    {
-        if (expr.args.size < 1)
-            return std::nullopt;
-
-        auto* str = expr.args.data[0]->as<Luau::AstExprConstantString>();
-        if (!str)
-            return std::nullopt;
-
-        std::string fileName(str->value.data, str->value.size);
-        auto result = platform->resolveSharedModuleName(fileName);
-
-        if (result.status == SharedModuleResult::Ambiguous)
-        {
-            std::string errorMsg = "shared: " + std::to_string(result.allMatches.size()) + " files found matching '" + fileName + "'";
-            for (const auto& match : result.allMatches)
-                errorMsg += "\n  - " + match;
-            typeChecker.reportError(Luau::TypeError{expr.args.data[0]->location, Luau::GenericError{errorMsg}});
-            return std::nullopt;
-        }
-
-        if (result.status == SharedModuleResult::NotFound)
-        {
-            typeChecker.reportError(
-                Luau::TypeError{expr.args.data[0]->location, Luau::GenericError{"shared: no file found matching '" + fileName + "'"}});
-            return std::nullopt;
-        }
-
-        Luau::ModuleInfo moduleInfo{result.moduleName};
-        Luau::TypeArena& arena = typeChecker.currentModule->internalTypes;
-        Luau::TypeId moduleType = typeChecker.checkRequire(scope, moduleInfo, expr.location);
-
-        // Retain the dependency module to prevent its interfaceTypes arena from being freed
-        // while the consumer still holds TypeIds pointing into it.
-        if (auto depModule = typeChecker.resolver->getModule(result.moduleName))
-            typeChecker.currentModule->retainedModules.push_back(depModule);
-
-        return Luau::WithPredicate<Luau::TypePackId>{arena.addTypePack({moduleType})};
-    }
-
-    bool infer(const Luau::MagicFunctionCallContext& context) override
-    {
-        if (context.callSite->args.size < 1)
-            return false;
-
-        auto* str = context.callSite->args.data[0]->as<Luau::AstExprConstantString>();
-        if (!str)
-            return false;
-
-        std::string fileName(str->value.data, str->value.size);
-        auto result = platform->resolveSharedModuleName(fileName);
-
-        if (result.status == SharedModuleResult::Ambiguous)
-        {
-            std::string errorMsg = "shared: " + std::to_string(result.allMatches.size()) + " files found matching '" + fileName + "'";
-            for (const auto& match : result.allMatches)
-                errorMsg += "\n  - " + match;
-            context.solver->reportError(Luau::GenericError{errorMsg}, context.callSite->args.data[0]->location);
-            return false;
-        }
-
-        if (result.status == SharedModuleResult::NotFound)
-        {
-            context.solver->reportError(
-                Luau::GenericError{"shared: no file found matching '" + fileName + "'"}, context.callSite->args.data[0]->location);
-            return false;
-        }
-
-        Luau::ModuleInfo moduleInfo{result.moduleName};
-        Luau::TypeId moduleType = context.solver->resolveModule(moduleInfo, context.callSite->location);
-        Luau::TypePackId modulePack = context.solver->arena->addTypePack({moduleType});
-        Luau::asMutable(context.result)->ty.emplace<Luau::BoundTypePack>(modulePack);
-        return true;
-    }
-};
 
 void RobloxPlatform::mutateRegisteredDefinitions(Luau::GlobalTypes& globals, std::optional<nlohmann::json> metadata)
 {
@@ -924,288 +856,4 @@ void RobloxPlatform::mutateRegisteredDefinitions(Luau::GlobalTypes& globals, std
             ++it;
     }
     globals.globalScope->importedTypeBindings.emplace("Enum", enumTypes);
-
-    // Attach MagicShared to the `shared` global
-    // Create or replace the `shared` binding with a function type that has a magic function for module resolution.
-    // shared("FileName") resolves to the return type of the named module.
-    {
-        Luau::TypeArena& arena = globals.globalTypes;
-
-        Luau::TypePackId argPack = arena.addTypePack({globals.builtinTypes->stringType});
-        Luau::TypePackId retPack = arena.addTypePack(Luau::TypePack{{globals.builtinTypes->anyType}});
-        Luau::TypeId sharedFnType = arena.addType(Luau::FunctionType{argPack, retPack});
-
-        Luau::attachMagicFunction(sharedFnType, std::make_shared<MagicShared>(this));
-        Luau::attachTag(sharedFnType, "SharedModules");
-
-        globals.globalScope->bindings[Luau::AstName("shared")] = Luau::Binding{sharedFnType};
-    }
-}
-
-// ---- Filename Index Implementation ----
-
-static std::string getStem(const std::string& filename)
-{
-    auto dotPos = filename.rfind('.');
-    if (dotPos == std::string::npos)
-        return filename;
-    return filename.substr(0, dotPos);
-}
-
-static std::string normalizeSlashes(const std::string& path)
-{
-    std::string result = path;
-    std::replace(result.begin(), result.end(), '\\', '/');
-    return result;
-}
-
-void RobloxPlatform::buildFileNameIndex()
-{
-    fileNameIndex.clear();
-
-    if (!workspaceFolder)
-        return;
-
-    const auto& rootUri = workspaceFolder->rootUri;
-    std::string rootPath = rootUri.fsPath();
-
-    Luau::FileUtils::traverseDirectoryRecursive(rootPath,
-        [&](const std::string& path)
-        {
-            auto uri = Uri::file(path);
-            auto ext = uri.extension();
-            if (ext == ".lua" || ext == ".luau")
-            {
-                auto moduleName = fileResolver->getModuleName(uri);
-                addFileToIndex(uri, moduleName);
-            }
-        });
-}
-
-void RobloxPlatform::addFileToIndex(const Uri& uri, const Luau::ModuleName& moduleName)
-{
-    if (!workspaceFolder)
-        return;
-
-    std::string fname = uri.filename();
-    std::string stem = getStem(fname);
-
-    // Compute relative path from workspace root, without extension
-    std::string relPath = uri.lexicallyRelative(workspaceFolder->rootUri);
-    relPath = normalizeSlashes(relPath);
-    // Remove extension from relative path
-    auto dotPos = relPath.rfind('.');
-    if (dotPos != std::string::npos)
-        relPath = relPath.substr(0, dotPos);
-
-    // Rojo convention: init.luau/init.lua represents the parent directory as a module
-    if (stem == "init")
-    {
-        if (auto parentUri = uri.parent())
-        {
-            stem = parentUri->filename();
-            // Strip /init from the relative path so it represents the directory
-            if (relPath.size() >= 5 && relPath.substr(relPath.size() - 5) == "/init")
-                relPath = relPath.substr(0, relPath.size() - 5);
-        }
-    }
-
-    std::string lowerStem = toLower(stem);
-
-    // Remove any existing entry for the same file to avoid duplicates
-    // (e.g., when a git checkout triggers a Created event for an already-indexed file)
-    auto& entries = fileNameIndex[lowerStem];
-    entries.erase(
-        std::remove_if(entries.begin(), entries.end(),
-            [&](const FileIndexEntry& entry)
-            {
-                if (!fileResolver)
-                    return false;
-                return fileResolver->getUri(entry.moduleName) == uri;
-            }),
-        entries.end());
-
-    entries.push_back(FileIndexEntry{moduleName, relPath});
-}
-
-void RobloxPlatform::removeFileFromIndex(const Uri& uri)
-{
-    std::string fname = uri.filename();
-    std::string stem = getStem(fname);
-
-    // Rojo convention: init.luau/init.lua uses the parent directory name
-    if (stem == "init")
-    {
-        if (auto parentUri = uri.parent())
-            stem = parentUri->filename();
-    }
-
-    std::string lowerStem = toLower(stem);
-
-    auto it = fileNameIndex.find(lowerStem);
-    if (it == fileNameIndex.end())
-        return;
-
-    auto& entries = it->second;
-    entries.erase(
-        std::remove_if(entries.begin(), entries.end(),
-            [&](const FileIndexEntry& entry)
-            {
-                if (!fileResolver)
-                    return false;
-                return fileResolver->getUri(entry.moduleName) == uri;
-            }),
-        entries.end());
-
-    if (entries.empty())
-        fileNameIndex.erase(it);
-}
-
-SharedModuleResult RobloxPlatform::resolveSharedModuleName(const std::string& name) const
-{
-    SharedModuleResult result;
-    std::string normalizedName = normalizeSlashes(name);
-
-    // Check if name contains path separators (partial path)
-    bool isPartialPath = normalizedName.find('/') != std::string::npos;
-
-    if (!isPartialPath)
-    {
-        // Simple filename lookup
-        std::string lowerName = toLower(normalizedName);
-        auto it = fileNameIndex.find(lowerName);
-        if (it == fileNameIndex.end() || it->second.empty())
-        {
-            result.status = SharedModuleResult::NotFound;
-            return result;
-        }
-
-        if (it->second.size() == 1)
-        {
-            result.status = SharedModuleResult::Found;
-            result.moduleName = it->second[0].moduleName;
-            return result;
-        }
-
-        // Multiple matches
-        result.status = SharedModuleResult::Ambiguous;
-        for (const auto& entry : it->second)
-            result.allMatches.push_back(entry.moduleName);
-        return result;
-    }
-
-    // Partial path: match from the end of the relative path
-    // Extract the stem (last component) to narrow down candidates
-    auto lastSlash = normalizedName.rfind('/');
-    std::string stem = (lastSlash != std::string::npos) ? normalizedName.substr(lastSlash + 1) : normalizedName;
-    std::string lowerStem = toLower(stem);
-    std::string lowerPartialPath = toLower(normalizedName);
-
-    auto it = fileNameIndex.find(lowerStem);
-    if (it == fileNameIndex.end() || it->second.empty())
-    {
-        result.status = SharedModuleResult::NotFound;
-        return result;
-    }
-
-    // Filter by partial path suffix match
-    std::vector<const FileIndexEntry*> matches;
-    for (const auto& entry : it->second)
-    {
-        std::string lowerRelPath = toLower(entry.relativePath);
-        // Check if the relative path ends with the partial path
-        if (lowerRelPath == lowerPartialPath)
-        {
-            matches.push_back(&entry);
-        }
-        else if (lowerRelPath.size() > lowerPartialPath.size())
-        {
-            // Check suffix match: the character before the match must be '/'
-            size_t startPos = lowerRelPath.size() - lowerPartialPath.size();
-            if (lowerRelPath.substr(startPos) == lowerPartialPath && lowerRelPath[startPos - 1] == '/')
-                matches.push_back(&entry);
-        }
-    }
-
-    if (matches.empty())
-    {
-        result.status = SharedModuleResult::NotFound;
-        return result;
-    }
-
-    if (matches.size() == 1)
-    {
-        result.status = SharedModuleResult::Found;
-        result.moduleName = matches[0]->moduleName;
-        return result;
-    }
-
-    result.status = SharedModuleResult::Ambiguous;
-    for (const auto* entry : matches)
-        result.allMatches.push_back(entry->moduleName);
-    return result;
-}
-
-void RobloxPlatform::populateSharedTypeBindings(
-    Luau::Frontend& frontend, const Luau::ModuleName& name, const Luau::ScopePtr& scope, bool forAutocomplete)
-{
-    auto* sourceModule = frontend.getSourceModule(name);
-    if (!sourceModule || !sourceModule->root)
-        return;
-
-    auto& resolver = (forAutocomplete && !FFlag::LuauSolverV2) ? frontend.moduleResolverForAutocomplete : frontend.moduleResolver;
-
-    // Helper: given a shared() call expression, populate type bindings for the variable
-    auto tryBindSharedCall = [&](Luau::AstExprCall* call, const char* varName)
-    {
-        auto maybeShared = types::matchShared(*call);
-        if (!maybeShared)
-            return;
-
-        auto* str = (*maybeShared)->as<Luau::AstExprConstantString>();
-        if (!str)
-            return;
-
-        std::string fileName(str->value.data, str->value.size);
-        auto result = resolveSharedModuleName(fileName);
-        if (result.status != SharedModuleResult::Found)
-            return;
-
-        if (auto module = resolver.getModule(result.moduleName))
-        {
-            const Luau::Name bindingName{varName};
-            scope->importedTypeBindings[bindingName] = module->exportedTypeBindings;
-            scope->importedModules[bindingName] = result.moduleName;
-        }
-    };
-
-    for (auto* stat : sourceModule->root->body)
-    {
-        auto* local = stat->as<Luau::AstStatLocal>();
-        if (!local)
-            continue;
-
-        for (size_t i = 0; i < local->vars.size; ++i)
-        {
-            // Case 1: local X = shared("...")
-            if (i < local->values.size)
-            {
-                if (auto* call = local->values.data[i]->as<Luau::AstExprCall>())
-                {
-                    tryBindSharedCall(call, local->vars.data[i]->name.value);
-                    continue;
-                }
-            }
-
-            // Case 2: local X: typeof(shared("..."))
-            if (auto* annotation = local->vars.data[i]->annotation)
-            {
-                if (auto* typeofNode = annotation->as<Luau::AstTypeTypeof>())
-                {
-                    if (auto* call = typeofNode->expr->as<Luau::AstExprCall>())
-                        tryBindSharedCall(call, local->vars.data[i]->name.value);
-                }
-            }
-        }
-    }
 }

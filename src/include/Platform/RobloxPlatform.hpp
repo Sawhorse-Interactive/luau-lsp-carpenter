@@ -15,6 +15,20 @@ struct RobloxDefinitionsFileMetadata
 };
 NLOHMANN_DEFINE_OPTIONAL(RobloxDefinitionsFileMetadata, CREATABLE_INSTANCES, SERVICES)
 
+enum class ScriptContext
+{
+    Client,
+    Server,
+    Shared
+};
+
+inline bool isScriptContextCompatible(ScriptContext from, ScriptContext target)
+{
+    if (from == ScriptContext::Shared || target == ScriptContext::Shared)
+        return true;
+    return from == target;
+}
+
 struct SourceNode
 {
     const SourceNode* parent = nullptr; // Can be null! NOT POPULATED BY SOURCEMAP, must be written to manually
@@ -24,6 +38,7 @@ struct SourceNode
     std::vector<SourceNode*> children{};
     std::string virtualPath; // NB: NOT POPULATED BY SOURCEMAP, must be written to manually
     bool pluginManaged = false;
+    ScriptContext scriptContext = ScriptContext::Shared; // NB: NOT POPULATED BY SOURCEMAP, must be written to manually
 
     // The corresponding TypeId for this sourcemap node
     // A different TypeId is created for each type checker (frontend.typeChecker and frontend.typeCheckerForAutocomplete)
@@ -39,6 +54,14 @@ struct SourceNode
     std::optional<const SourceNode*> findDescendant(const std::string& name) const;
     // O(n) search for ancestor of name
     std::optional<const SourceNode*> findAncestor(const std::string& name) const;
+    bool isAncestorOf(const SourceNode* other) const;
+    /// Walk a slash-delimited path (supporting `.`, `..`, and `./` prefixes) from this node.
+    /// Returns nullptr if any segment fails to resolve.
+    const SourceNode* walkPath(const std::string& path) const;
+    /// Recursively clear the cached sourcemap-generated types (`tys`) for this node and its descendants.
+    /// Must be called whenever the types the cache points into are about to be destroyed, including on
+    /// nodes detached from the tree (which `RobloxPlatform::clearSourcemapTypes` cannot reach)
+    void clearCachedTypes() const;
 
     bool containsFilePaths() const;
     ordered_json toJson() const;
@@ -61,20 +84,6 @@ struct PluginNode
 /// E.g., "Model >> BasePart" → {"BasePart"}, "Part, TextLabel" → {"Part", "TextLabel"}
 std::vector<std::string> parseClassNamesFromSelector(const std::string& selector);
 
-struct SharedModuleResult
-{
-    enum Status
-    {
-        Found,
-        NotFound,
-        Ambiguous
-    };
-
-    Status status = NotFound;
-    Luau::ModuleName moduleName;
-    std::vector<Luau::ModuleName> allMatches;
-};
-
 class RobloxPlatform : public LSPPlatform
 {
 private:
@@ -90,13 +99,11 @@ private:
 
     void clearSourcemapTypes();
 
-    // Filename index for shared() resolution: maps lowercase stem -> list of (moduleName, relative path)
-    struct FileIndexEntry
-    {
-        Luau::ModuleName moduleName;
-        std::string relativePath; // relative to workspace root, without extension, using forward slashes
-    };
-    std::unordered_map<std::string, std::vector<FileIndexEntry>> fileNameIndex;
+    /// Clears `realPathsToSourceNodes`/`virtualPathsToSourceNodes` and repopulates them by walking
+    /// `rootSourceNode`. Must be used (rather than calling `writePathsToMap` directly) whenever the
+    /// tree may have been pruned, since `writePathsToMap` only overwrites entries for nodes still in
+    /// the tree and would otherwise leave stale entries pointing at pruned/freed nodes.
+    void rebuildPathMaps();
 
 public:
     // The root source node from a parsed Rojo source map
@@ -115,7 +122,7 @@ public:
     }
     bool updateSourceMap();
     bool updateSourceMapFromContents(const std::string& sourceMapContents);
-    void writePathsToMap(SourceNode* node, const std::string& base);
+    void writePathsToMap(SourceNode* node, const std::string& base, ScriptContext parentNameContext = ScriptContext::Shared);
     void updateSourcemapTypes();
 
     std::optional<Uri> getRealPathFromSourceNode(const SourceNode* sourceNode) const;
@@ -143,7 +150,14 @@ public:
 
     std::optional<std::string> readSourceCode(const Luau::ModuleName& name, const Uri& path) const override;
 
+    std::optional<Luau::ModuleInfo> resolveStringRequire(
+        const Luau::ModuleInfo* context, const std::string& requiredString, const Luau::TypeCheckLimits& limits) override;
     std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node, const Luau::TypeCheckLimits& limits) override;
+
+    std::unique_ptr<Luau::RequireSuggester> getRequireSuggester() override;
+    Luau::LanguageServer::AutoImports::ModuleVisitor getAutoImportsModuleVisitor(const Luau::ModuleName& from) override;
+    std::optional<Luau::LanguageServer::AutoImports::RequirePathComputer> getAutoImportsRequirePathComputer(
+        const Luau::ModuleName& from, ImportRequireStyle style) override;
 
     void updateSourceNodeMap(const std::string& sourceMapContents);
 
@@ -175,15 +189,6 @@ public:
     void onStudioPluginClear();
     bool handleNotification(const std::string& method, std::optional<json> params) override;
 
-    // shared() module resolution
-    void buildFileNameIndex();
-    void addFileToIndex(const Uri& uri, const Luau::ModuleName& moduleName);
-    void removeFileFromIndex(const Uri& uri);
-    SharedModuleResult resolveSharedModuleName(const std::string& name) const;
-
-    // Populate scope->importedTypeBindings for shared() calls in the given module
-    void populateSharedTypeBindings(
-        Luau::Frontend& frontend, const Luau::ModuleName& name, const Luau::ScopePtr& scope, bool forAutocomplete);
 
     using LSPPlatform::LSPPlatform;
 };
