@@ -8951,6 +8951,7 @@ type CameraState = {
 
 
 
+
 type ProductIdentifierArray = any
 type ReflectedClassOrNil = any
 type VideoSampleArray = any
@@ -9809,6 +9810,18 @@ declare class AudioTremolo extends Instance
 	Skew: number
 	Square: number
 	WiringChanged: RBXScriptSignal<boolean, string, Wire, Instance>
+	function GetConnectedWires(self, pin: string): { Instance }
+	function GetInputPins(self): { any }
+	function GetOutputPins(self): { any }
+end
+
+declare extern type AudioWindSynthesizer extends Instance with
+	Enabled: boolean
+	PositionInstance: Instance
+	PositionType: EnumAudioPositionType
+	Profile: EnumWindSoundProfile
+	Volume: number
+	WiringChanged: RBXScriptSignal<(boolean, string, Wire, Instance)>
 	function GetConnectedWires(self, pin: string): { Instance }
 	function GetInputPins(self): { any }
 	function GetOutputPins(self): { any }
@@ -12978,6 +12991,11 @@ declare class MemStorageConnection extends Instance
 end
 
 declare class MemStorageService extends Instance
+end
+
+declare extern type MemoryStoreDistributedCounter extends Instance with
+	function GetAsync(self): number
+	function IncrementAsync(self, delta: number, expiration: number): number
 end
 
 declare extern type MemoryStoreDistributedCounter extends Instance with
