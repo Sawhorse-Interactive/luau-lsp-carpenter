@@ -9044,7 +9044,18 @@ type ReflectedClassOrNil = ReflectedClass?
 type ReflectedClasses = { ReflectedClass }
 type ReflectedProperties = { ReflectedProperty }
 
-declare extern type Object with
+
+
+
+type InfoTypeArray = any
+type ProductIdentifierArray = any
+type RankedItemArray = any
+type VideoSampleArray = any
+type ReflectedProperties = any
+type ReflectedClasses = any
+type ReflectedClassOrNil = any
+
+declare class Object
 	@[deprecated {use = "Object:IsA"}]
 		function isA(self, className: string): boolean
 	Changed: RBXScriptSignal<string>
@@ -9903,6 +9914,18 @@ declare extern type AudioTremolo extends Instance with
 	Shape: number
 	Skew: number
 	Square: number
+	WiringChanged: RBXScriptSignal<(boolean, string, Wire, Instance)>
+	function GetConnectedWires(self, pin: string): { Instance }
+	function GetInputPins(self): { any }
+	function GetOutputPins(self): { any }
+end
+
+declare extern type AudioWindSynthesizer extends Instance with
+	Enabled: boolean
+	PositionInstance: Instance
+	PositionType: EnumAudioPositionType
+	Profile: EnumWindSoundProfile
+	Volume: number
 	WiringChanged: RBXScriptSignal<(boolean, string, Wire, Instance)>
 	function GetConnectedWires(self, pin: string): { Instance }
 	function GetInputPins(self): { any }
@@ -13208,6 +13231,11 @@ declare extern type MemStorageConnection extends Instance with
 end
 
 declare extern type MemStorageService extends Instance with
+end
+
+declare extern type MemoryStoreDistributedCounter extends Instance with
+	function GetAsync(self): number
+	function IncrementAsync(self, delta: number, expiration: number): number
 end
 
 declare extern type MemoryStoreDistributedCounter extends Instance with

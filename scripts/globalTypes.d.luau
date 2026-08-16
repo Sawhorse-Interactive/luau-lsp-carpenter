@@ -9044,7 +9044,18 @@ type ReflectedClassOrNil = ReflectedClass?
 type ReflectedClasses = { ReflectedClass }
 type ReflectedProperties = { ReflectedProperty }
 
-declare extern type Object with
+
+
+
+type VideoSampleArray = any
+type ProductIdentifierArray = any
+type ReflectedClasses = any
+type ReflectedProperties = any
+type RankedItemArray = any
+type ReflectedClassOrNil = any
+type InfoTypeArray = any
+
+declare class Object
 	@[deprecated {use = "Object:IsA"}]
 		function isA(self, className: string): boolean
 	Changed: RBXScriptSignal<string>
@@ -10150,6 +10161,18 @@ declare extern type AudioTremolo extends Instance with
 	Shape: number
 	Skew: number
 	Square: number
+	WiringChanged: RBXScriptSignal<(boolean, string, Wire, Instance)>
+	function GetConnectedWires(self, pin: string): { Instance }
+	function GetInputPins(self): { any }
+	function GetOutputPins(self): { any }
+end
+
+declare extern type AudioWindSynthesizer extends Instance with
+	Enabled: boolean
+	PositionInstance: Instance
+	PositionType: EnumAudioPositionType
+	Profile: EnumWindSoundProfile
+	Volume: number
 	WiringChanged: RBXScriptSignal<(boolean, string, Wire, Instance)>
 	function GetConnectedWires(self, pin: string): { Instance }
 	function GetInputPins(self): { any }
